@@ -1,0 +1,9 @@
+# Set minimum angles, maximum angles and percentage of assistance.
+float64 right_hip
+float64 right_knee
+float64 right_ankle
+float64 left_hip
+float64 left_knee
+float64 left_ankle
+---
+bool success

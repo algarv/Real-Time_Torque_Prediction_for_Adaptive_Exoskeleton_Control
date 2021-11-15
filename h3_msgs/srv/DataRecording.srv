@@ -1,0 +1,19 @@
+# Start data recording in a text file using .csv format.
+# The data recording can be started/stopped by software o hardware.  
+# The file is saved as file_base_name_counter.
+# timed:
+# true: The data recording finish when the duration_time is completed.
+# false: duration_time is ignored.
+# duration_time: Data recording time in (seconds.miliseconds).
+uint8 SW_STOP_MODE = 0
+uint8 SW_START_MODE = 1
+uint8 TRIGGER_INPUT_PULSE_MODE = 2
+uint8 TRIGGER_INPUT_HIGH_MODE = 3
+uint8 TRIGGER_OUTPUT_PULSE_MODE = 4
+uint8 TRIGGER_OUTPUT_HIGH_MODE = 5
+uint8 recording_trigger_mode
+string file_base_name
+bool timed
+float64 duration_time
+---
+bool success

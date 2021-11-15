@@ -1,0 +1,18 @@
+# Select a control type for each joint
+uint8 NO_CONTROL = 0
+uint8 POSITION_CONTROL = 1
+uint8 STIFFNESS_CONTROL = 2
+uint8 TORQUE_CONTROL = 3
+uint8 MOTOR_DISABLED = 4
+uint8 MOTOR_STOPPED = 5
+uint8 OPEN_LOOP = 6
+uint8 TASK_CONTROLLER = 7
+uint8 right_hip
+uint8 right_knee
+uint8 right_ankle
+uint8 left_hip
+uint8 left_knee
+uint8 left_ankle
+---
+bool success
+
