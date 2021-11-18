@@ -6,7 +6,7 @@
 
 *Last Edit:* 11/17/21 @ 6:00pm 
 
-##Protocol for setting up computers the first time
+## Protocol for setting up computers the first time
 
 1. Set Up Computers
    
@@ -81,7 +81,7 @@
     5. Wifi Ubuntu: 192.168.0.6
     6. Ethernet Ubuntu: 192.168.0.7
     
-##Protocol preparing for every use with a computer as master
+## Protocol preparing for every use with a computer as master
 
 1. Network  
     1. Windows
@@ -217,7 +217,7 @@
         rosrun talker_listener QC_node
        ```
     
-##Protocol for use with a human subject
+## Protocol for use with a human subject
 
 1. Calibration
     1. Calibrate EMG for MU prediction - may not work b/c we need max EMG at %MVC right now
@@ -240,9 +240,9 @@
     3. Calibrate at different angles?
 2. 
 
-##Contents of package and dependencies
+## Contents of package and dependencies
 
-###h3_msgs - Messages and services required to run the H3
+### h3_msgs - Messages and services required to run the H3
 
 *msg*
 - State.msg
@@ -254,7 +254,7 @@
 - Joint.srv
 - TriggerOutput.srv
     
-###talker_listener - primary package 
+### talker_listener - primary package 
 
 *nodes*
 - QC_node - receives raw EMG (calls qc_stream) and sends torque command
@@ -272,7 +272,7 @@ _ listener.py
 - talker.py
 - test_script.py
 
-###Launch Files used from technaid_h3_ros
+### Launch Files used from technaid_h3_ros
 
 - Launches the hardware interface
 
@@ -289,7 +289,7 @@ _ listener.py
     4. Monitoring: 
        `h3_control_client h3_monitoring_controller.launch`
 
-###Adapting Configuration Variables
+### Adapting Configuration Variables
 
 - Setting joint control type for each joint - set to no control for unused
     - No control: 0?
@@ -300,7 +300,7 @@ _ listener.py
 - 
 
 
-##Notes about the H3
+## Notes about the H3
 
 - DF is negative, PF is positive, neutral (0 rad) is foot perpendicular to shank
 - Angles in radians
@@ -312,11 +312,11 @@ _ listener.py
         - Robot States: 
         - Joint States: 
 
-##If This Problem Occurs
+## If This Problem Occurs
 
 -
 
-##Next Steps and Considerations
+## Next Steps and Considerations
 
 - Create a node for calibration
 - Create a node for MU firing prediction
@@ -330,6 +330,6 @@ _ listener.py
 - On the node controlling torque, when I kill the node (ctrl+c), I need it to send torque command of zero
 - Figure out PuTTY
 
-#RESOURCES
+# OTHER RESOURCES
 
 See H3_Documentation_V0.0.2_draft.pdf for H3 Documentation 
