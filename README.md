@@ -4,7 +4,7 @@
 
 *Created:* 11/15/21
 
-*Last Edit:* 11/17/21 @ 6:00pm 
+*Last Edit:* 11/22/21 @ 2:00pm 
 
 ## Protocol for setting up computers the first time
 
@@ -84,6 +84,15 @@
 ## Protocol preparing for every use with a computer as master
 
 1. Network  
+    1. Router
+        1. Plug in Router
+        2. Go to 192.168.0.1 in internet
+        3. Log in to router is *exoskeleton*
+        3. Go to `Wifi Settings`-> `Wifi Name & Password` and unselected 5 GHz network and click save 
+        4. Go to `System Settings` -> `DHCP Reservation`
+            1. Change the IP address of the Raspberry Pi to 192.168.0.2 and this computer to 192.168.0.4
+            2. If this works you can ignore step 2 for Windows and 2 and 3 for Raspberry Pi
+        5. 
     1. Windows
         1. Open Settings
         2. For Wifi Connection: Open Wifi
@@ -97,6 +106,7 @@
                 3. Gateway: 192.168.0.255
             6. Check using `ipconfig`
         3. For Ethernet Connection:
+            1. 
         4. Type `environment` into Windows and select `Edit the system environment variables`
         5. Select `Environment variables...`
         6. Under `System Variables`, edit the following:
@@ -104,8 +114,13 @@
             2. Set `ROS_MASTER_URI` to `https://(IP of the master):11311`
             3. Click `Ok`
     2. Raspberry Pi
-        1. Go to applications and search network
-        2. For Wifi Connection: Select `Network`
+        1. Plug a mouse, keyboard, power, and micro-USB to HDMI into the Raspberry Pi
+             1. Sometimes you have to unpluge and replug the HDMI connection
+             2. Login: 
+                 1. Username: exoh3
+                 2. Password exoskeleton
+        2. Go to applications and search network
+        3. For Wifi Connection: Select `Network`
              1. Connect to network (don't use the 5G)
              2. Select settings icon and edit IPv4
              3. Select manual and fill in the address of the raspberry
@@ -113,7 +128,12 @@
                 2. Netmask: 255.255.255.0
                 3. Gateway: 192.168.0.255
              4. Check `ifconfig` to ensure that it worked
-        3. For Ethernet Connection:
+        4. For Ethernet Connection:
+        5. **NOTE:** When turning off the Raspberry Pi, connect pin 11 (GPU 17) to 39
+        ![img_1.png](img_1.png)
+            1. The Raspberry Pi 3 Model has the same pinout as the 4 Model
+            2. Only a red button should be lit up
+            3. This can be replaced by a simple button
     3. Ubuntu
         1. Go to settings and select the settings next to the wifi
         2. For Wifi Connection: Select `Network`
@@ -125,6 +145,7 @@
                 3. Gateway: 192.168.0.255
                 4. Check `ifconfig` to ensure that it worked
         3. For Ethernet Connection:
+            1.
         4. Go to `Home` in files and ensure `Show Hidden Files` is selected
         5. Click on `.bashrc` file and scroll to the bottom
         6. Type/ uncomment
@@ -210,13 +231,18 @@
         4. This GUI also allows you to plot by adding the `plot` plugin and selecting a topic
     3. Command line # need to check if this is right
         ```commandline
-        rostopic pub -r (rate) /h3/joint_states/position[0] {0}
+        rostopic pub -r (rate) /h3/right_ankle_effort_controller/command std_msgs/Float64 "data: 0.0"
         ```
     4. Nodes
         ```commandline
         rosrun talker_listener QC_node
        ```
     
+## SSH
+
+1. `ssh exoh3@192.168.0.2`
+2. password: exoskeleton
+
 ## Protocol for use with a human subject
 
 1. Calibration
@@ -314,7 +340,8 @@ _ listener.py
 
 ## If This Problem Occurs
 
--
+1. If you are unable to publish but can receive, try turning your firewall off
+    1. For example: go to McAffee and turn firewall off
 
 ## Next Steps and Considerations
 
@@ -330,6 +357,6 @@ _ listener.py
 - On the node controlling torque, when I kill the node (ctrl+c), I need it to send torque command of zero
 - Figure out PuTTY
 
-# OTHER RESOURCES
+## Other Resources
 
 See H3_Documentation_V0.0.2_draft.pdf for H3 Documentation 

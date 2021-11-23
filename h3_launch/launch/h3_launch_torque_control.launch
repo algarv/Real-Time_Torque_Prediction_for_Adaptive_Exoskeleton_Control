@@ -1,0 +1,5 @@
+<launch>
+    <include file="$(find h3_hardware_interface)/launch/h3_hardware_interface.launch" />
+    <include file="$(find h3_control_client)/h3_torque_controllers.launch"/>
+
+</launch>

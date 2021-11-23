@@ -20,9 +20,10 @@ def talker():
             t = -5
         rospy.loginfo(out)
         #pub.publish(out)
-        emg = record_print()
-        rospy.loginfo(emg*3)
-        pub.publish(emg*3)
+        #emg = record_print()
+        #rospy.loginfo(emg*3)
+        #pub.publish(emg*3)
+        pub.publish(out)
         rate.sleep()
         t+=1
 
