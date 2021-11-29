@@ -86,7 +86,7 @@
 1. Network  
     1. Router
         1. Plug in Router
-        2. Go to 192.168.0.1 in internet
+        2. Go to 192.168.0.1 in any web browser
         3. Log in to router is *exoskeleton*
         3. Go to `Wifi Settings`-> `Wifi Name & Password` and unselected 5 GHz network and click save 
         4. Go to `System Settings` -> `DHCP Reservation`
