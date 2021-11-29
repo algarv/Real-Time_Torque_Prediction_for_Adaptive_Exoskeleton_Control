@@ -17,7 +17,7 @@
     2. Raspberry Pi (Ubuntu 18.04, ROS Melodic): 
         1. Install Image: *Rpi4B_Ubuntu_18_04.ROS.img* by pluggin in the SD card
         2. Run *win32diskimager-1.0.0-install.exe*
-        3.  Merge SD Card
+        3. In case the SD memory has multiple partitions, apply the following Merge procedure:
             1. Open command and run as administrator
             ```commandline
             diskpart
@@ -39,11 +39,11 @@
                 - Run `roscore` and see if it works
             4. To check if workspace (h3_ws) with H3 package is compiled, see next section
      
-    3. Ubuntu Computer (Ubuntu 18 or 20, ROS Melodic or Noetic
+    3. Ubuntu Computer (Ubuntu 18.04 or 20.04 with ROS Melodic or Noetic, respectively) 
         1. Follow this link: http://wiki.ros.org/Installation/Ubuntu
         2. On Step 2, select the noetic-ubuntu branch
   
-2. Download H3 Software #is this in the right spot/ should it be in the above section
+2. Download H3 Repository #is this in the right spot/ should it be in the above section
     
     1. Clone git repository: 
 
