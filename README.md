@@ -92,7 +92,6 @@
         4. Go to `System Settings` -> `DHCP Reservation`
             1. Change the IP address of the Raspberry Pi to 192.168.0.2 and this computer to 192.168.0.4
             2. If this works you can ignore step 2 for Windows and 2 and 3 for Raspberry Pi
-        5. 
     1. Windows
         1. Open Settings
         2. For Wifi Connection: Open Wifi
