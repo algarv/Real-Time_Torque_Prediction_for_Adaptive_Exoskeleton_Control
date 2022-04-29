@@ -162,7 +162,7 @@ include_directories(
 catkin_install_python(
 	PROGRAMS
 	nodes/QC_node.py
-	#nodes/qc_stream.py
+	nodes/qc_stream_node.py
 	DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
