@@ -104,7 +104,7 @@ catkin_python_setup()
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES talker_listener
-#  CATKIN_DEPENDS rospy std_msgs
+ CATKIN_DEPENDS rospy std_msgs
 #  DEPENDS system_lib
 )
 
@@ -162,8 +162,9 @@ include_directories(
 #)
 catkin_install_python(
 	PROGRAMS
-	nodes/QC_node.py
-	#nodes/qc_stream.py
+	nodes/QC_node3.py
+	nodes/qc_stream_node.py
+	nodes/emg_stream.py
 	DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

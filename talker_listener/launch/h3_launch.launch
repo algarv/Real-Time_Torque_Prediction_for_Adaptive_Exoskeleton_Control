@@ -1,0 +1,17 @@
+<launch>
+
+    <arg name = 'sim' default = 'false'/> 
+
+    <group unless="$(arg sim)">
+        <include file="$(find h3_hardware_interface)/launch/h3_hardware_interface.launch" />
+        <include file="$(find h3_control_client)/h3_torque_controllers.launch"/>
+        <node name="QC_stream_node" pkg="talker_listener" type="qc_stream_node.py" output="screen"/>
+    </group>
+
+    <group if="$(arg sim)">
+        <node name="emg_stream" pkg="talker_listener" type="emg_stream.py" output="screen"/>
+    </group>
+
+    <node name="QC_node" pkg="talker_listener" type="QC_node3.py" output="screen"/>
+
+</launch>
