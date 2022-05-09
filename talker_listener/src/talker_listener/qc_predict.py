@@ -181,7 +181,7 @@ buffsize = 5
 # set save path
 #path = "C:\\Users\\MSHORT\\PycharmProjects\\emgStreaming\\data\\pilot_20210524"  # "C:/Users/jlevine/Desktop"
 # path = "C:\\opt\\ros\\noetic\\catkin2_ws\\src\\talker_listener"
-path = ""
+# path = ""
 
 # initialize trial parameters
 trialnum = 3  # 1-3
@@ -200,7 +200,7 @@ setnum = len(range(chanset[0], chanset[1]))
 numchan = 64
 
 # load model from h5 file
-modelFile = "technaid_h3_ankle_ros_python/compilation/best_model_cnn-0_0_DF.otb+_Tibialis anterior_Niter150_FastICA_JL-SG0-ST20-WS120-MU[0, 1, 2, 3]_1618602878_f.h5"
+# modelFile = "technaid_h3_ankle_ros_python/compilation/best_model_cnn-0_0_DF.otb+_Tibialis anterior_Niter150_FastICA_JL-SG0-ST20-WS120-MU[0, 1, 2, 3]_1618602878_f.h5"
 #modelFile = "best_model_cnn-0_0_PF.otb+_Gastrocnemius medialis_Niter150_FastICA_JL-SG0-ST20-WS120-MU[0, 1, 2, 3]_1618600237_f.h5"
 #modelFile = "best_model_cnn-20_0_PF.otb+_Gastrocnemius medialis_Niter150_FastICA_JL-SG0-ST20-WS120-MU[0, 1, 2, 3]_1619757623_f.h5"
 
@@ -217,9 +217,9 @@ matnorm = normdata['matnorm'][0]
 matnorm = np.append(matnorm, matnorm)  # for both GM and TA
 '''
 # number of motor units (from model file)
-munum = len(mu)
+# munum = len(mu)
 # initialize motor unit decomposer
-mude = MUdecomposer(os.path.join(path,modelFile))
+# mude = MUdecomposer(os.path.join(path,modelFile))
 
 if __name__ == '__main__':
 

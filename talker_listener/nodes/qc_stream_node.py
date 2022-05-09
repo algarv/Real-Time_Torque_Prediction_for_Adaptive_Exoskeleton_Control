@@ -73,7 +73,7 @@ def record_print():
     timestamp.append(time.time())
     data.append(sample_from_channels)
     #print(sample_from_channels)
-    return sample_from_channels[0]
+    return sample_from_channels
     #pub.publish(sample_from_channels)
 
     print(time.time()-time1)

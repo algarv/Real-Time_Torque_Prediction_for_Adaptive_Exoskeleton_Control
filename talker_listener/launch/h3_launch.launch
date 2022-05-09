@@ -1,6 +1,7 @@
 <launch>
 
     <arg name = 'sim' default = 'false'/> 
+    <param name="file_dir" value = "$(find talker_listener)" />
 
     <group unless="$(arg sim)">
         <include file="$(find h3_hardware_interface)/launch/h3_hardware_interface.launch" />

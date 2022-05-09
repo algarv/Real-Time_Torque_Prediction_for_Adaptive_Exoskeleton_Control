@@ -1,14 +1,29 @@
 import rospy
-from std_msgs.msg import String, Float64, Float64MultiArray, MultiArrayDimension
+from std_msgs.msg import Float64MultiArray, MultiArrayDimension
 from rospy.core import logdebug 
+import csv
+
+
+
 
 def main():
-    rospy.init_node('QC_node')
-    r = rospy.Rate(100) #100Hz for torque controller
+    rospy.init_node('QC_node', log_level=rospy.DEBUG)
+    r = rospy.Rate(10) #100Hz for torque controller
     pub = rospy.Publisher('hdEMG_stream', Float64MultiArray, queue_size=10)
-
+    
+    i = 0
     while not rospy.is_shutdown():
-        reading = [0.0,0.0,0.0,0.0, 0.01,0.01,0.01,0.01, 0.02,0.02,0.02,0.02, 0.03,0.03,0.03,0.03]
+        # reading = [0.37607, 1.4765, 1.67209, 1.723066, 1.49284, 1.4423, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        path = rospy.get_param("/file_dir")
+        stream = open(path + "/src/talker_listener/offline_emg.csv")
+        csv_reader = csv.reader(stream, delimiter=',')
+
+        reading = []
+        for row in csv_reader:
+            reading.append(float(row[i]))
+        reading.pop(0)
+        logdebug(reading)
+
         sample = Float64MultiArray()
         sample.data = reading
 
@@ -18,6 +33,7 @@ def main():
 
         sample.layout.dim = dim
 
+        i += 1
         pub.publish(sample)
         r.sleep()
 
