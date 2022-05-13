@@ -165,6 +165,7 @@ catkin_install_python(
 	nodes/QC_node3.py
 	nodes/qc_stream_node.py
 	nodes/emg_stream.py
+	nodes/calibrate.py
 	DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

@@ -7,13 +7,19 @@ from talker_listener.qc_predict import MUdecomposer
 from rospy.core import logdebug
 
 path = rospy.get_param("/file_dir")
-model_file = path + "/src/talker_listener/best_model_cnn-0_0_DF.otb+_Tibialis anterior_Niter150_FastICA_JL-SG0-ST20-WS120-MU[0, 1, 2, 3]_1618602878_f.h5"
+model_file = path + "/src/talker_listener/" + "best_model_cnn-allrun5_c8b_mix4-SG0-ST20-WS40-MU[0, 1, 2, 3]_1644222946_f.h5"
 model = MUdecomposer(model_file)
-
+sample = [] 
 def predict_MUs(hdEMG):
     logdebug(hdEMG.data)
     global neural_drive
-    neural_drive = model.predict_MUs(hdEMG.data)
+    if len(sample) < 124:
+        sample.append(hdEMG.data)
+    else:
+        sample.pop()
+        sample.append(hdEMG.data)
+        neural_drive = model.predict_MUs(hdEMG.data)
+
     # neural_drive = random.randint(0,1) 
 
 def calc_torque(neural_drive):
@@ -32,9 +38,9 @@ def main():
         global neural_drive
         try:
             torque_cmd = calc_torque(neural_drive)
-            logdebug(torque_cmd)
+            # logdebug(torque_cmd)
         except:
-            logdebug("Could not find torque_cmd")
+            # logdebug("Could not find torque_cmd")
             continue
 
         pub.publish(torque_cmd)
