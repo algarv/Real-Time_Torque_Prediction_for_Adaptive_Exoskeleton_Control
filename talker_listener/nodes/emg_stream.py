@@ -13,7 +13,6 @@ def main():
     
     i = 0
     while not rospy.is_shutdown():
-        # reading = [0.37607, 1.4765, 1.67209, 1.723066, 1.49284, 1.4423, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         path = rospy.get_param("/file_dir")
         stream = open(path + "/src/talker_listener/offline_emg.csv")
         csv_reader = csv.reader(stream, delimiter=',')
@@ -38,8 +37,8 @@ def main():
         sample.data = reading
 
         dim = []
-        dim.append(MultiArrayDimension("rows", 4, 3*4))
-        dim.append(MultiArrayDimension("columns", 4, 1))
+        dim.append(MultiArrayDimension("rows", 4, 16*4))
+        dim.append(MultiArrayDimension("columns", 1, 1))
 
         sample.layout.dim = dim
 

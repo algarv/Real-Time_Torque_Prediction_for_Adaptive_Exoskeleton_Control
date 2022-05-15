@@ -7,15 +7,14 @@ import os
 import numpy as np
 import talker_listener.qc_communication as comm
 import pandas as pd
-from std_msgs.msg import String, Float64, Float64MultiArray
+from std_msgs.msg import String, Float64, Float64MultiArray, MultiArrayDimension
 
 # set save path
 path = "C:\\Users\\Jackson\\Documents\\Jackson\\northwestern\\SRALAB\\H3" # "C:/Users/jlevine/Desktop"
 # set file name
 #datafile = "why_32768.csv"
 
-def record_print():
-
+def startup():
     # number of channels (408 for the quattrocento device)
     nchan = 384+16+8
     # sampling frequency (set in OT BioLab Light)
@@ -51,6 +50,15 @@ def record_print():
     time.sleep(0.01)
     msg = q_socket.recv(8)
     print(msg.decode("ascii") + " connected")
+    q_socket.send(stop_comm.encode())
+    
+    return q_socket, nchan, nbytes
+
+def record_print(q_socket, nchan, nbytes):
+    start_comm = 'startTX'
+    stop_comm = 'stopTX'
+
+    q_socket.send(start_comm.encode())
 
     # Loop for receiving, converting and displaying incoming data
     time1 = time.time()
@@ -70,8 +78,8 @@ def record_print():
         nbytes,
         output_milli_volts=False)
     # print(sample_from_channels[384])
-    timestamp.append(time.time())
-    data.append(sample_from_channels)
+    # timestamp.append(time.time())
+    #data.append(sample_from_channels)
     #print(sample_from_channels)
     return sample_from_channels
     #pub.publish(sample_from_channels)
@@ -82,10 +90,10 @@ def record_print():
     q_socket.send(stop_comm.encode())
 
     # Convert raw data and timestamps to array and save
-    dataset = np.array(data)
-    timestamps = np.array(timestamp)
-    timestamps = timestamps - timestamps[0]
-    df = pd.DataFrame(np.column_stack((timestamps, dataset)))
+    #dataset = np.array(data)
+    # timestamps = np.array(timestamp)
+    # timestamps = timestamps - timestamps[0]
+    #df = pd.DataFrame(np.column_stack((timestamps, dataset)))
 
     channum = [str(n) for n in list(range(1, 65))]
     auxnum = [str(n) for n in list(range(1, 17))]
@@ -108,7 +116,16 @@ if __name__ == '__main__':
     r = rospy.Rate(10) #10Hz
     pub = rospy.Publisher('hdEMG_stream', Float64MultiArray, queue_size=10)
     r = rospy.Rate(2048)
+    
+    q_socket, nchan, nbytes = startup()
+
     while not rospy.is_shutdown():
-        emg_data = record_print()
-        pub.publish(emg_data)
+        sample = Float64MultiArray()
+        sample.data = record_print(q_socket, nchan, nbytes)
+        
+        dim = []
+        dim.append(MultiArrayDimension("rows",4,16*4))
+        dim.append(MultiArrayDimension("columns",1,1))
+        sample.layout.dim = dim        
+        pub.publish(sample)
         r.sleep()
