@@ -18,7 +18,8 @@ def torque_calib(sensor_reading):
 
 def emg_calib(hdEMG):
     global emg_array
-    emg_array.append(hdEMG.data) #pick specific value?
+    sample = np.mean(hdEMG.data)
+    emg_array.append(sample) #pick specific value?
     
 def main():
     rospy.init_node('calibration', log_level=rospy.DEBUG)
@@ -35,11 +36,12 @@ def main():
     duration = rospy.Duration.from_sec(trial_length) 
     while (rospy.Time.now() < start + duration):
         logdebug(torque_array)
+        logdebug(emg_array)
         r.sleep()
 
-    y = np.array(torque_array)
-    x = np.array(emg_array)
-    model = lm.LinearRegression
+    y = np.array(torque_array).reshape(-1,1)
+    x = np.array(emg_array).reshape(-1,1)
+    model = lm.LinearRegression()
     res=model.fit(x,y)
     intercept = res.params[0]
     slope = res.params[1]

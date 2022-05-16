@@ -37,7 +37,7 @@ def calc_torque_emg():
     m = rospy.get_param('slope')
     b = rospy.get_param('intercept')
     try: 
-        torque_cmd = m * sample + b #need to take specific sample value
+        torque_cmd = m * np.mean(sample) + b #need to take specific sample value
     except:
         logdebug("Waiting for sample")
         torque_cmd = 0
