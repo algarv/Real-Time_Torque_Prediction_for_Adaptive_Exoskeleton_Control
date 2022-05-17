@@ -5,8 +5,6 @@
     <param name="calibrated" value = 'false'/>
 
     <group unless="$(arg sim)">
-        <include file="$(find h3_hardware_interface)/launch/h3_hardware_interface.launch" />
-        <include file="$(find h3_control_client)/h3_torque_controllers.launch"/>
         <node name="QC_stream_node" pkg="talker_listener" type="qc_stream_node.py" output="screen"/>
     </group>
 

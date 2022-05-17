@@ -1,6 +1,6 @@
 # from sklearn.decomposition import PCA
 # from sklearn.preprocessing import normalize
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import numpy as np
 import scipy.io as sio
 from os import path
@@ -211,7 +211,7 @@ def get_cnn1d_api(shape_in, shape_out, nn_nodes=[128, 128, 128, 64, 256]):
 # use tensorboard for display
 from tensorflow.keras.callbacks import TensorBoard, EarlyStopping, ModelCheckpoint, LambdaCallback
 import time
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import os

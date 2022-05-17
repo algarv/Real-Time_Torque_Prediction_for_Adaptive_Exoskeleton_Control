@@ -57,18 +57,18 @@ def main():
             if first_run == True:
                 sample = []
             first_run = False
-            try:
-                if method == 'cst':
-                    torque_cmd = calc_torque_cst()
-                
-                if method == 'emg':
-                    torque_cmd = 10*calc_torque_emg()
+            #try:
+            if method == 'cst':
+                torque_cmd = calc_torque_cst()
             
-                logdebug("Torque_CMD: ")
-                logdebug(torque_cmd)
-            except:
-                logdebug("Could not find torque_cmd")
-                continue
+            if method == 'emg':
+                torque_cmd = 2 * calc_torque_emg()
+        
+            logdebug("Torque_CMD: ")
+            logdebug(torque_cmd)
+            #except:
+                #logdebug("Could not find torque_cmd")
+                #continue
 
             pub.publish(torque_cmd)
             r.sleep()
