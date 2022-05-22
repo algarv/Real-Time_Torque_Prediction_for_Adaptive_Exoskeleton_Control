@@ -4,19 +4,17 @@ from rospy.core import logdebug
 import csv
 
 
-
-
 def main():
-    rospy.init_node('QC_node', log_level=rospy.DEBUG)
-    r = rospy.Rate(10) #100Hz for torque controller
+    rospy.init_node('emg_stream', log_level=rospy.DEBUG)
+    r = rospy.Rate(100)
     pub = rospy.Publisher('hdEMG_stream', Float64MultiArray, queue_size=10)
     
     i = 0
-    while not rospy.is_shutdown():
+    while not rospy.is_shutdown():    
         path = rospy.get_param("/file_dir")
         stream = open(path + "/src/talker_listener/offline_emg.csv")
         csv_reader = csv.reader(stream, delimiter=',')
-        
+    
         reading1 = []
         reading2 = []
         reading3 = []
@@ -42,8 +40,10 @@ def main():
 
         sample.layout.dim = dim
 
-        i += 4
         pub.publish(sample)
+        i += 4
+        if i > len(row) - 4:
+            i = 0
         r.sleep()
 
 

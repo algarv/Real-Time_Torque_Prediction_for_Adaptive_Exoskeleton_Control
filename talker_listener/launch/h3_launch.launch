@@ -10,6 +10,7 @@
 
     <group if="$(arg sim)">
         <node name="emg_stream" pkg="talker_listener" type="emg_stream.py" output="screen"/>
+        <node name="torque_stream" pkg="talker_listener" type="torque_stream.py" output="screen"/>
     </group>
 
     <node name="calibration" pkg="talker_listener" type="calibrate.py" output="screen"/>

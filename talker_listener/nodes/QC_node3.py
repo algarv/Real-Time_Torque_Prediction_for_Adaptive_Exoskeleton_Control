@@ -23,7 +23,7 @@ def get_sample(hdEMG):
     else:
         sample.pop()
         sample.append(hdEMG.data)
-
+    
 def calc_torque_cst():
     global sample
 
@@ -66,9 +66,6 @@ def main():
         
             logdebug("Torque_CMD: ")
             logdebug(torque_cmd)
-            #except:
-                #logdebug("Could not find torque_cmd")
-                #continue
 
             pub.publish(torque_cmd)
             r.sleep()
