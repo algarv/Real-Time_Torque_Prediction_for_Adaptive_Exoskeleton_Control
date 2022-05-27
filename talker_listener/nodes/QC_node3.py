@@ -15,63 +15,64 @@ model = MUdecomposer(model_file)
 win = 40
 method = 'emg' # 'cst'
 
-def get_sample(hdEMG):
-    global sample 
-    
-    if len(sample) < win:
-        sample.append(hdEMG.data)
-    else:
-        sample.pop()
-        sample.append(hdEMG.data)
-    
-def calc_torque_cst():
-    global sample
+class QC_node:
+    def __init__(self):
+        r = rospy.Rate(10) #100Hz for torque controller
+        pub = rospy.Publisher('/h3/right_ankle_effort_controller/command', Float64, queue_size=10)
+        sub = rospy.Subscriber('hdEMG_stream', Float64MultiArray, self.get_sample)
+        self.first_run = True
+        self.sample = []
+        while not rospy.is_shutdown():
+            if rospy.get_param('calibrated') == True:
+                if self.first_run == True:
+                    self.sample = []
+                self.first_run = False
 
-    nueral_drive = model.predict_MUs(sample)
-    #Linear regression to map neural drive to torque
+                logdebug("Sample: ")
+                logdebug(self.sample)
 
-    return random.randint(-10,10)
-
-def calc_torque_emg():
-    global sample
-    m = rospy.get_param('slope')
-    b = rospy.get_param('intercept')
-    try: 
-        torque_cmd = m * np.mean(sample) + b #need to take specific sample value
-    except:
-        logdebug("Waiting for sample")
-        torque_cmd = 0
-    
-    return torque_cmd
-
-def main():
-    rospy.init_node('QC_node', log_level=rospy.DEBUG)
-    r = rospy.Rate(10) #100Hz for torque controller
-    pub = rospy.Publisher('/h3/right_ankle_effort_controller/command', Float64, queue_size=10)
-    sub = rospy.Subscriber('hdEMG_stream', Float64MultiArray, get_sample)
-    first_run = True
-    while not rospy.is_shutdown():
-        global sample
-        sample = []
-        if rospy.get_param('calibrated') == True:
-            if first_run == True:
-                sample = []
-            first_run = False
-            #try:
-            if method == 'cst':
-                torque_cmd = calc_torque_cst()
+                if method == 'cst':
+                    torque_cmd = self.calc_torque_cst()
+                
+                if method == 'emg':
+                    torque_cmd = 2 * self.calc_torque_emg()
             
-            if method == 'emg':
-                torque_cmd = 2 * calc_torque_emg()
-        
-            logdebug("Torque_CMD: ")
-            logdebug(torque_cmd)
+                logdebug("Torque_CMD: ")
+                logdebug(torque_cmd)
 
-            pub.publish(torque_cmd)
-            r.sleep()
+                pub.publish(torque_cmd)
+                r.sleep()
+
+    def get_sample(self,hdEMG):
+        
+        if len(self.sample) < win:
+            self.sample.append(hdEMG.data)
+        else:
+            self.sample.pop()
+            self.sample.append(hdEMG.data)
+        
+    def calc_torque_cst(self):
+
+        nueral_drive = model.predict_MUs(self.sample)
+        #Linear regression to map neural drive to torque
+
+        return random.randint(-10,10)
+
+    def calc_torque_emg(self):
+        m = rospy.get_param('slope')
+        b = rospy.get_param('intercept')
+        try: 
+            torque_cmd = m * np.mean(self.sample) + b #need to take specific sample value
+        except:
+            logdebug("Waiting for sample")
+            torque_cmd = 0
+        
+        return torque_cmd
+        
 
 if __name__ == '__main__':
     try:
-        main()
+        rospy.init_node('QC_node', log_level=rospy.DEBUG)
+        node = QC_node()
     except rospy.ROSInterruptException:
         pass
