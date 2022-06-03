@@ -6,7 +6,6 @@ import scipy as sp
 from scipy import signal
 from std_msgs.msg import Float64, Float64MultiArray
 from sklearn import linear_model as lm
-#import tkinter
 import matplotlib.pyplot as plt
 from rospy.core import logdebug
 from h3_msgs.msg import State
@@ -28,42 +27,46 @@ class calibrate:
         self.pos_pub = rospy.Publisher('/h3/right_ankle_position_controller/command',Float64, queue_size=10)
 
         self.torque_array = []
+        self.PF0_array = []
+        self.PF10_array = []
+        self.DF0_array = []
+        self.DF10_array = []
         self.emg_array = []
         self.time = []
 
+        logdebug("Starting PFO")
         self.PF0()
     
     def max(self):
-        logdebug("Starting torque: ")
-        logdebug(self.torque_array)
+
         start_index = len(self.torque_array)
         start = rospy.Time.now()
         duration = rospy.Duration.from_sec(5) 
         while (rospy.Time.now() < start + duration):
-            # logdebug(self.time)
-            # logdebug(self.torque_array)
-            #logdebug(self.emg_array)
             self.r.sleep()
 
         MVC = np.max(self.torque_array[start_index:]) #moving window average filter?
         return MVC
 
-    def PF0(self):
-        logdebug("Moving to 0")
-        self.pos_pub.publish(float(-0.17))
-        rospy.sleep(5)
-
-        logdebug("MVC 1")
+    def get_max(self):
+        logdebug("Go!")
         max1 = self.max()
-        rospy.sleep(5)
-        logdebug("MVC 2")
-        max2 = self.max()
-        self.max_PF0 = float((max1 + max2)/2)
-        rospy.set_param('max_PF0', self.max_PF0)
+        logdebug("MVC 1: ")
+        logdebug(max1)
 
-        logdebug("STARTING PF0")
+        logdebug("REST")
+        rospy.sleep(5)
+
+        logdebug("Go!")
+        max2 = self.max()
+        logdebug("MVC 2: ")
+        logdebug(max2)
+
+        return float((max1 + max2)/2)
+
+    def make_traj_trap(self, min, max, len):
         desired_traj = [0, 0, 0]
-        step = .20 * self.max_PF0 / 5
+        step =  .20 * (max-min) / 5
         prev = 0
         for i in range(5):
             desired_traj.append(prev)
@@ -74,148 +77,181 @@ class calibrate:
         for i in range(5):
             desired_traj.append(prev)
             prev -= step
-        #desired_traj = np.concatenate((np.linspace(0,int(.20 * self.max_PF0,5)),5*int(np.ones(.20 * self.max_PF0)),np.linspace(int(.20 * self.max_PF0,0,6))))
+
         desired_traj.append(0)
         desired_traj.append(0)
         desired_traj.append(0)
-        x = np.linspace(10,36,26)
-        self.axs.plot(x,desired_traj, color='blue')
-        self.axs.set_xlim(10, 36)
-        self.axs.set_ylim(0, self.max_PF0)
-        #self.calib_index = len(self.torque_array)
-        start_index = len(self.torque_array)
+
+        return desired_traj
+
+    def PF0(self):
+        logdebug("Moving to 0")
+        self.pos_pub.publish(float(0.0))
+        rospy.sleep(5)
+
+        logdebug("Apply Max PF Torque")
+        
+        self.max_PF0 = self.get_max()
+        rospy.set_param('max_PF0', self.max_PF0)
+
+        desired_traj = self.make_traj_trap(0,self.max_PF0,25)
+
+        self.axs.plot(desired_traj, color='blue')
+        self.axs.set_xlim(0, 25)
+        self.axs.set_ylim(0, 1.25*self.max_PF0)
+
         start = rospy.Time.now()
+        self.torque_array = []
+        self.emg_array = []
+        self.start_time = start.to_sec()
+        self.time = []
         duration = rospy.Duration.from_sec(trial_length)
         i = 0
-        while (rospy.Time.now() < start + duration):
+        while (rospy.Time.now() < (start + duration)):
             i += 1
-            # logdebug(self.time)
-            # logdebug(self.torque_array)
-            # logdebug(self.emg_array)
-            # torque_for_plot = []
-            #for i in range(start_index, len(self.time)):
-            #     torque_for_plot.append(self.time[i] - start.to_sec())
-            # self.time[start_index:] - start.to_sec()
-            x = np.linspace(0, i, len(self.torque_array[start_index:]))
-            self.axs.plot(self.time[start_index:], self.torque_array[start_index:], color='red')
+            self.axs.plot(self.time, self.torque_array, color='red')
             plt.pause(.01)
             self.r.sleep()
 
+        self.PF0_torque_array = self.torque_array
+        self.PF0_emg_array = self.emg_array
+        
         logdebug("REST")
-        plt.close()
         rospy.sleep(rest_time)
+        plt.close()
         logdebug("Starting PF20")
         self.PF20()
 
     def PF20(self):
+        self.fig, self.axs = plt.subplots()
+
         logdebug("Moving to 10 degrees")
         self.pos_pub.publish(0.17)
         rospy.sleep(5)
 
-        logdebug("MVC 1")
-        max1 = self.max()
-
-        rospy.sleep(5)
-        logdebug("MVC 2")
-        max2 = self.max()
-        self.max_PF20 = float((max1 + max2)/2)
+        self.max_PF20 = self.get_max()
         rospy.set_param('max_PF20', self.max_PF20)
 
-
-        desired_traj = [0, 0, 0]
-        step = .20 * self.max_PF20 / 5
-        prev = 0
-        for i in range(5):
-            desired_traj.append(prev)
-            prev += step
-        for i in range(10):
-            desired_traj.append(.20 * self.max_PF0)
-        prev = desired_traj[-1]
-        for i in range(5):
-            desired_traj.append(prev)
-            prev -= step
-        # desired_traj = np.concatenate((np.linspace(0,int(.20 * self.max_PF0,5)),5*int(np.ones(.20 * self.max_PF0)),np.linspace(int(.20 * self.max_PF0,0,6))))
-        desired_traj.append(0)
-        desired_traj.append(0)
-        desired_traj.append(0)
-        x = np.linspace(20+ 10+10+trial_length+rest_time, 20+10+10+trial_length+rest_time+trial_length, trial_length)
-        self.axs.set_xlim(20+10+10+trial_length+rest_time, 20+10+10+trial_length+rest_time+trial_length)
-        self.axs.set_ylim(0, self.max_PF20)
-        self.axs.plot(x, desired_traj, color='blue')
+        desired_traj = self.make_traj_trap(0,self.max_PF20,25)
+        self.axs.plot(desired_traj, color='blue')
+        self.axs.set_xlim(0, 26)
+        self.axs.set_ylim(0, 1.25*self.max_PF0)
 
         #self.calib_index = len(self.torque_array)
-        start_index = len(self.torque_array)
         start = rospy.Time.now()
-        duration = rospy.Duration.from_sec(trial_length) 
+        self.torque_array = []
+        self.emg_array = []
+        self.start_time = start.to_sec()
+        self.time = []
+        duration = rospy.Duration.from_sec(trial_length)
         while (rospy.Time.now() < start + duration):
-            # logdebug(time)
-            # logdebug(torque_array)
-            # logdebug(emg_array)
-            self.axs.plot(self.time[start_index:], self.torque_array[start_index:], color='red')
-            plt.pause(.01)
-            self.r.sleep()
-
-        # self.DF0()
-        self.calibration()
-
-    def DF0(self):
-        self.pos_pub.publish(0.0)
-
-        plt.clf()
-        desired_traj = np.concatenate((np.linspace(0,5,5),5*np.ones(5),np.linspace(5,0,6)))
-        self.axs.plot(desired_traj, color='blue')
-
-        start = rospy.Time.now()
-        duration = rospy.Duration.from_sec(trial_length) 
-        while (rospy.Time.now() < start + duration):
-            # logdebug(time)
-            # logdebug(torque_array)
-            # logdebug(emg_array)
             self.axs.plot(self.time, self.torque_array, color='red')
             plt.pause(.01)
             self.r.sleep()
 
+        self.PF20_torque_array = self.torque_array
+        self.PF2O_emg_array = self.emg_array
+
+        logdebug("REST")
+        rospy.sleep(rest_time)
+        plt.close()
+        logdebug("Starting DF0")
+        self.DF0()
+
+    def DF0(self):
+        self.fig, self.axs = plt.subplots()
+
+        logdebug("Moving to 0 degrees")
+        self.pos_pub.publish(0.0)
+        rospy.sleep(5)
+
+        self.max_DF0 = self.get_max()
+        rospy.set_param('max_DF0', self.max_DF0)
+
+        desired_traj = self.make_traj_trap(0,self.max_PF20,25)
+        self.axs.plot(desired_traj, color='blue')
+        self.axs.set_xlim(0, 26)
+        self.axs.set_ylim(0, 1.25*self.max_PF0)
+
+        start = rospy.Time.now()
+        self.torque_array = []
+        self.emg_array = []
+        self.start_time = start.to_sec()
+        self.time = []
+        duration = rospy.Duration.from_sec(trial_length)
+        while (rospy.Time.now() < start + duration):
+            self.axs.plot(self.time, self.torque_array, color='red')
+            plt.pause(.01)
+            self.r.sleep()
+
+        self.DF0_torque_array = self.torque_array
+        self.DFO_emg_array = self.emg_array
+
+        logdebug("REST")
+        rospy.sleep(rest_time)
+        plt.close()
+        logdebug("Starting DF20")
         self.DF20()
 
     def DF20(self):
-        self.pos_pub.publish(0.34)
+        self.fig, self.axs = plt.subplots()
 
-        plt.clf()
-        desired_traj = np.concatenate((np.linspace(0,5,5),5*np.ones(5),np.linspace(5,0,6)))
+        logdebug("Moving to 20 degrees")
+        self.pos_pub.publish(-0.17)
+        rospy.sleep(5)
+
+        self.max_DF20 = self.get_max()
+        rospy.set_param('max_DF20', self.max_DF20)
+
+        desired_traj = self.make_traj_trap(0,self.max_DF20,25)
         self.axs.plot(desired_traj, color='blue')
+        self.axs.set_xlim(0, 26)
+        self.axs.set_ylim(0, 1.25*self.max_PF0)
 
         start = rospy.Time.now()
-        duration = rospy.Duration.from_sec(trial_length) 
+        self.torque_array = []
+        self.emg_array = []
+        self.start_time = start.to_sec()
+        self.time = []
+        duration = rospy.Duration.from_sec(trial_length)
         while (rospy.Time.now() < start + duration):
-            # logdebug(time)
-            # logdebug(torque_array)
-            # logdebug(emg_array)
             self.axs.plot(self.time, self.torque_array, color='red')
             plt.pause(.01)
             self.r.sleep()
 
+        self.DF20_torque_array = self.torque_array
+        self.DF2O_emg_array = self.emg_array
+
+        logdebug("Starting Calibration")
         self.calibration()
 
     def calibration(self):
-        y = np.array(self.torque_array).reshape(-1,1)  # Cut out undesired time points
-        x = signal.resample(self.emg_array, len(y))
-        x = np.array(x).reshape(-1,1)
+        y = np.concatenate((self.PF0_torque_array, self.PF20_torque_array, self.DF0_torque_array, self.DF20_torque_array)).reshape(-1,1)  # Cut out undesired time points
+        
+        x1 = signal.resample(self.PF2O_emg_array, len(self.PF0_torque_array))
+        x2 = signal.resample(self.PF0_emg_array, len(self.PF20_torque_array))
+        x3 = signal.resample(self.DF0_emg_array, len(self.DF0_torque_array))
+        x4 = signal.resample(self.DF20_emg_array, len(self.DF20_torque_array))
+        
+        x = np.concatenate((x1, x2, x3, x4)).reshape(-1,1)
+        
         model = lm.LinearRegression()
         res=model.fit(x,y)
-        intercept = res.intercept_[0]
-        slope = res.coef_[0][0]
-        intercept = float(intercept)
-        slope = float(slope)
+        
+        intercept = float(res.intercept_[0])
+        slope = float(res.coef_[0][0])
+
         logdebug(intercept)
         logdebug(slope)
+
         rospy.set_param('intercept',intercept)
         rospy.set_param('slope',slope)
         rospy.set_param('calibrated', True)
 
     def torque_calib(self,sensor_reading):
         torque = sensor_reading.joint_torque_sensor[2]
-        if len(self.torque_array) > 0:
-            torque -= self.torque_array[0]
+        # if len(self.torque_array) > 0:
+        #     torque -= self.torque_array[0]
         self.torque_array.append(abs(torque))
         self.time.append(rospy.Time.now().to_sec() - self.start_time)
         if torque > max_torque:

@@ -12,18 +12,25 @@ def main():
     i = 0
     while not rospy.is_shutdown():
 
-        if i < 5:
-            reading[2] = i
-        elif i < 10:
-            reading[2] = 5
-        else:
-            reading[2] = 15 - i
+        reading[2] = 2
+        # if i < 3:
+        #     reading[2] = 0
+        # elif i < 8: 
+        #     reading[2] = i
+        # elif i < 18:
+        #     reading[2] = 1
+        # elif i < 23:
+        #     reading[2] = 3 - i
+        # else: 
+        #     reading[2] = 0
 
         sample = State()
         sample.joint_torque_sensor = reading
 
         i += .01
         pub.publish(sample)
+        if i > 26:
+            i = 0
         r.sleep()
 
 

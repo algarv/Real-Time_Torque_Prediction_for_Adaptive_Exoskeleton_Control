@@ -13,7 +13,7 @@ model_file = path + "/src/talker_listener/" + "best_model_cnn-allrun5_c8b_mix4-S
 model = MUdecomposer(model_file)
 
 win = 40
-method = 'emg' # 'cst'
+method = 'cst' #'emg'
 
 class QC_node:
     def __init__(self):
@@ -28,14 +28,14 @@ class QC_node:
                     self.sample = []
                 self.first_run = False
 
-                logdebug("Sample: ")
-                logdebug(self.sample)
+                # logdebug("Sample: ")
+                # logdebug(self.sample)
 
                 if method == 'cst':
                     torque_cmd = self.calc_torque_cst()
                 
                 if method == 'emg':
-                    torque_cmd = 2 * self.calc_torque_emg()
+                    torque_cmd = self.calc_torque_emg()
             
                 logdebug("Torque_CMD: ")
                 logdebug(torque_cmd)
