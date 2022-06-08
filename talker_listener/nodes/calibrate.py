@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from cv2 import log
 import rospy
 import numpy as np
 import scipy as sp
@@ -10,10 +11,9 @@ import matplotlib.pyplot as plt
 from rospy.core import logdebug
 from h3_msgs.msg import State
 
-
-max_torque = 0
 trial_length = 26 #seconds
 rest_time = 15 #seconds
+torque_window = 10**7 #samples (100 Hz * 100 ms Window)
 
 class calibrate:
     def __init__(self):
@@ -25,8 +25,9 @@ class calibrate:
         torque_sub = rospy.Subscriber('/h3/robot_states', State, self.torque_calib)
         emg_sub = rospy.Subscriber('hdEMG_stream', Float64MultiArray, self.emg_calib)
         self.pos_pub = rospy.Publisher('/h3/right_ankle_position_controller/command',Float64, queue_size=10)
-
+        self.max_torque = 0
         self.torque_array = []
+        self.smoothed_torque_array = []
         self.PF0_array = []
         self.PF10_array = []
         self.DF0_array = []
@@ -102,6 +103,7 @@ class calibrate:
 
         start = rospy.Time.now()
         self.torque_array = []
+        self.smoothed_torque_array = []
         self.emg_array = []
         self.start_time = start.to_sec()
         self.time = []
@@ -109,11 +111,11 @@ class calibrate:
         i = 0
         while (rospy.Time.now() < (start + duration)):
             i += 1
-            self.axs.plot(self.time, self.torque_array, color='red')
+            self.axs.plot(self.time, self.smoothed_torque_array[0:len(self.time)], color='red')
             plt.pause(.01)
             self.r.sleep()
 
-        self.PF0_torque_array = self.torque_array
+        self.PF0_torque_array = self.smoothed_torque_array
         self.PF0_emg_array = self.emg_array
         
         logdebug("REST")
@@ -135,22 +137,60 @@ class calibrate:
         desired_traj = self.make_traj_trap(0,self.max_PF20,25)
         self.axs.plot(desired_traj, color='blue')
         self.axs.set_xlim(0, 26)
-        self.axs.set_ylim(0, 1.25*self.max_PF0)
+        self.axs.set_ylim(0, 1.25*self.max_PF20)
 
         #self.calib_index = len(self.torque_array)
         start = rospy.Time.now()
         self.torque_array = []
+        self.smoothed_torque_array = []
         self.emg_array = []
         self.start_time = start.to_sec()
         self.time = []
         duration = rospy.Duration.from_sec(trial_length)
         while (rospy.Time.now() < start + duration):
-            self.axs.plot(self.time, self.torque_array, color='red')
+            self.axs.plot(self.time, self.smoothed_torque_array[0:len(self.time)], color='red')
             plt.pause(.01)
             self.r.sleep()
 
-        self.PF20_torque_array = self.torque_array
-        self.PF2O_emg_array = self.emg_array
+        self.PF20_torque_array = self.smoothed_torque_array
+        self.PF20_emg_array = self.emg_array
+
+        logdebug("REST")
+        rospy.sleep(rest_time)
+        plt.close()
+        logdebug("Starting PFn20")
+        self.PFn20()
+
+    def PFn20(self):
+        self.fig, self.axs = plt.subplots()
+
+        logdebug("Moving to -10 degrees")
+        self.pos_pub.publish(-0.17)
+        rospy.sleep(5)
+
+        self.max_PFn20 = self.get_max()
+        rospy.set_param('max_PF20', self.max_PFn20)
+
+        desired_traj = self.make_traj_trap(0,self.max_PFn20,25)
+        self.axs.plot(desired_traj, color='blue')
+        self.axs.set_xlim(0, 26)
+        self.axs.set_ylim(0, 1.25*self.max_PFn20)
+
+        #self.calib_index = len(self.torque_array)
+        start = rospy.Time.now()
+        self.torque_array = []
+        self.smoothed_torque_array = []
+        self.emg_array = []
+        self.start_time = start.to_sec()
+        self.time = []
+        duration = rospy.Duration.from_sec(trial_length)
+        while (rospy.Time.now() < start + duration):
+            self.axs.plot(self.time, self.smoothed_torque_array[0:len(self.time)], color='red')
+            plt.pause(.01)
+            self.r.sleep()
+
+        self.PFn20_torque_array = self.smoothed_torque_array
+        self.PFn20_emg_array = self.emg_array
 
         logdebug("REST")
         rospy.sleep(rest_time)
@@ -175,17 +215,18 @@ class calibrate:
 
         start = rospy.Time.now()
         self.torque_array = []
+        self.smoothed_torque_array = []
         self.emg_array = []
         self.start_time = start.to_sec()
         self.time = []
         duration = rospy.Duration.from_sec(trial_length)
         while (rospy.Time.now() < start + duration):
-            self.axs.plot(self.time, self.torque_array, color='red')
+            self.axs.plot(self.time, self.smoothed_torque_array[0:len(self.time)], color='red')
             plt.pause(.01)
             self.r.sleep()
 
-        self.DF0_torque_array = self.torque_array
-        self.DFO_emg_array = self.emg_array
+        self.DF0_torque_array = self.smoothed_torque_array
+        self.DF0_emg_array = self.emg_array
 
         logdebug("REST")
         rospy.sleep(rest_time)
@@ -210,30 +251,34 @@ class calibrate:
 
         start = rospy.Time.now()
         self.torque_array = []
+        self.smoothed_torque_array = []
         self.emg_array = []
         self.start_time = start.to_sec()
         self.time = []
         duration = rospy.Duration.from_sec(trial_length)
         while (rospy.Time.now() < start + duration):
-            self.axs.plot(self.time, self.torque_array, color='red')
+            self.axs.plot(self.time, self.smoothed_torque_array[0:len(self.time)], color='red')
             plt.pause(.01)
             self.r.sleep()
 
-        self.DF20_torque_array = self.torque_array
-        self.DF2O_emg_array = self.emg_array
+        self.DF20_torque_array = self.smoothed_torque_array
+        self.DF20_emg_array = self.emg_array
 
         logdebug("Starting Calibration")
         self.calibration()
 
     def calibration(self):
-        y = np.concatenate((self.PF0_torque_array, self.PF20_torque_array, self.DF0_torque_array, self.DF20_torque_array)).reshape(-1,1)  # Cut out undesired time points
+        y = np.concatenate((self.PF20_torque_array, self.PF0_torque_array, self.PFn20_torque_array, self.DF0_torque_array, self.DF20_torque_array)).reshape(-1,1)
         
-        x1 = signal.resample(self.PF2O_emg_array, len(self.PF0_torque_array))
-        x2 = signal.resample(self.PF0_emg_array, len(self.PF20_torque_array))
-        x3 = signal.resample(self.DF0_emg_array, len(self.DF0_torque_array))
-        x4 = signal.resample(self.DF20_emg_array, len(self.DF20_torque_array))
-        
-        x = np.concatenate((x1, x2, x3, x4)).reshape(-1,1)
+        x1 = signal.resample(self.PF20_emg_array, len(self.PF20_torque_array))
+        x2 = signal.resample(self.PF0_emg_array, len(self.PF0_torque_array))
+        x3 = signal.resample(self.PFn20_emg_array, len(self.PFn20_torque_array))
+        x4 = signal.resample(self.DF0_emg_array, len(self.DF0_torque_array))
+        x5 = signal.resample(self.DF20_emg_array, len(self.DF20_torque_array))
+
+        self.DF20_torque_array = signal.resample(self.DF20_torque_array, len(x5))
+
+        x = np.concatenate((x1, x2, x3, x4, x5)).reshape(-1,1)
         
         model = lm.LinearRegression()
         res=model.fit(x,y)
@@ -252,10 +297,21 @@ class calibrate:
         torque = sensor_reading.joint_torque_sensor[2]
         # if len(self.torque_array) > 0:
         #     torque -= self.torque_array[0]
+        
         self.torque_array.append(abs(torque))
-        self.time.append(rospy.Time.now().to_sec() - self.start_time)
-        if torque > max_torque:
-            rospy.set_param('Max_Torque', torque)    
+        if len(self.torque_array) > 0:
+            if (len(self.torque_array) <= torque_window):
+                avg = np.sum(self.torque_array[0:]) / len(self.torque_array)
+                self.smoothed_torque_array.append(avg)
+            else:
+                avg = np.sum(self.torque_array[-1*torque_window:-1]) / torque_window
+                self.smoothed_torque_array.append(avg)
+        
+            self.time.append(rospy.Time.now().to_sec() - self.start_time)
+
+            if self.smoothed_torque_array[-1] > self.max_torque:
+                rospy.set_param('Max_Torque', torque)    
+                self.max_torque = torque
 
     def emg_calib(self,hdEMG):
         sample = np.mean(hdEMG.data)

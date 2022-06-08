@@ -2,13 +2,17 @@ import rospy
 from std_msgs.msg import Float64MultiArray, MultiArrayDimension
 from rospy.core import logdebug 
 import csv
-
+import scipy as sp
+from scipy import signal
 
 def main():
     rospy.init_node('emg_stream', log_level=rospy.DEBUG)
     r = rospy.Rate(100)
     pub = rospy.Publisher('hdEMG_stream', Float64MultiArray, queue_size=10)
     
+    nyquist = .5 * 2048
+    window = [20/nyquist, 50/nyquist]
+
     i = 0
     while not rospy.is_shutdown():    
         path = rospy.get_param("/file_dir")
@@ -31,8 +35,11 @@ def main():
 
         reading = reading1 + reading2 + reading3 + reading4
 
+        b, a = signal.butter(4, window, btype='bandpass')
+        filtered = signal.filtfilt(b, a, reading).tolist()
+
         sample = Float64MultiArray()
-        sample.data = reading
+        sample.data = filtered
 
         dim = []
         dim.append(MultiArrayDimension("rows", 4, 16*4))

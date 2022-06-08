@@ -7,12 +7,14 @@ import os
 import numpy as np
 import talker_listener.qc_communication as comm
 import pandas as pd
+import scipy as sp
 from std_msgs.msg import String, Float64, Float64MultiArray, MultiArrayDimension
 
 # set save path
 path = "C:\\Users\\Jackson\\Documents\\Jackson\\northwestern\\SRALAB\\H3" # "C:/Users/jlevine/Desktop"
 # set file name
 #datafile = "why_32768.csv"
+smoothing_window = 2048 * 10**5 #samples (2048 Hz * 100 ms window)
 
 def startup():
     # number of channels (408 for the quattrocento device)
@@ -122,7 +124,7 @@ if __name__ == '__main__':
     while not rospy.is_shutdown():
         sample = Float64MultiArray()
         sample.data = record_print(q_socket, nchan, nbytes)
-        
+
         dim = []
         dim.append(MultiArrayDimension("rows",4,16*4))
         dim.append(MultiArrayDimension("columns",1,1))
