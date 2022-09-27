@@ -86,7 +86,7 @@ def record_print(q_socket, nchan, nbytes):
     return sample_from_channels
     #pub.publish(sample_from_channels)
 
-    print(time.time()-time1)
+    #print(time.time()-time1)
 
     # End communication with the socket
     q_socket.send(stop_comm.encode())
@@ -125,9 +125,9 @@ if __name__ == '__main__':
         sample = Float64MultiArray()
         sample.data = record_print(q_socket, nchan, nbytes)
 
-        dim = []
-        dim.append(MultiArrayDimension("rows",4,16*4))
-        dim.append(MultiArrayDimension("columns",1,1))
-        sample.layout.dim = dim        
+        #dim = []
+        #dim.append(MultiArrayDimension("rows",16*4,3))
+        #dim.append(MultiArrayDimension("columns",1,1))
+        #sample.layout.dim = dim        
         pub.publish(sample)
         r.sleep()

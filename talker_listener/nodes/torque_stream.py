@@ -26,6 +26,10 @@ def main():
 
         sample = State()
         sample.joint_torque_sensor = reading
+        sample.joint_position = reading
+        sample.joint_velocity = reading
+        sample.joint_motor_torque = reading
+        sample.joint_torque_sensor = reading
 
         i += .01
         pub.publish(sample)
