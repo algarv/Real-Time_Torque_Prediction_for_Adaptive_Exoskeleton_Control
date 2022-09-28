@@ -23,7 +23,6 @@ def main():
         for num in row:
             temp_list.append(float(num))
         data.append(temp_list)
-    
     i = 0
     while not rospy.is_shutdown():    
         reading = data[i]

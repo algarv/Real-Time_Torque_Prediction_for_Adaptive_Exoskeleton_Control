@@ -16,7 +16,7 @@ model = MUdecomposer(model_file)
 win = 40
 method = 'cst' 
 adaptive = False #True
-channels = [1,2,3]
+channels = [1,2,3,4]
 
 mass = 2.37 #kg
 g = -9.81 #m/s^2
@@ -98,6 +98,7 @@ class QC_node:
     def calc_torque_cst(self):
 
         nueral_drive = model.predict_MUs(self.sample)
+        print(nueral_drive)
         #Linear regression to map neural drive to torque
 
         return random.randint(-10,10)

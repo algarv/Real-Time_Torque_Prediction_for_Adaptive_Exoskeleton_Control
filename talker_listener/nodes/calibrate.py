@@ -48,16 +48,20 @@ class calibrate:
         self.DF0_array = []
         self.DF10_array = []
         self.emg_array = []
+        self.cst_array = []
         self.sample = np.zeros((n, win, 64))
         self.batch_ready = False
         self.time = []
 
         if skip:
             rospy.wait_for_message('/h3/robot_states', State,timeout=None)
+            rospy.wait_for_message('hdEMG_stream',Float64MultiArray,timeout=None)
             rospy.set_param('intercept',2)
             rospy.set_param('slope',0)
             rospy.set_param('calibrated', True)
         else:
+            rospy.wait_for_message('/h3/robot_states',State,timeout=None)
+            rospy.wait_for_message('hdEMG_stream',Float64MultiArray,timeout=None)
             rospy.loginfo("Starting PFO")
             self.PF0()
     
@@ -129,6 +133,7 @@ class calibrate:
         self.smoothed_torque_array = []
         self.sample_count = 0
         self.emg_array = []
+        self.cst_array = []
         self.start_time = start.to_sec()
         self.time = []
         duration = rospy.Duration.from_sec(trial_length)
@@ -141,6 +146,7 @@ class calibrate:
 
         self.PF0_torque_array = self.smoothed_torque_array
         self.PF0_emg_array = self.emg_array
+        self.PF0_cst_array = self.cst_array
         
         rospy.loginfo("REST")
         rospy.sleep(rest_time)
@@ -169,6 +175,7 @@ class calibrate:
         self.smoothed_torque_array = []
         self.sample_count = 0
         self.emg_array = []
+        self.cst_array = []
         self.start_time = start.to_sec()
         self.time = []
         duration = rospy.Duration.from_sec(trial_length)
@@ -179,6 +186,7 @@ class calibrate:
 
         self.PF20_torque_array = self.smoothed_torque_array
         self.PF20_emg_array = self.emg_array
+        self.PF20_cst_array = self.cst_array
 
         rospy.loginfo("REST")
         rospy.sleep(rest_time)
@@ -207,6 +215,7 @@ class calibrate:
         self.smoothed_torque_array = []
         self.sample_count = 0
         self.emg_array = []
+        self.cst_array = []
         self.start_time = start.to_sec()
         self.time = []
         duration = rospy.Duration.from_sec(trial_length)
@@ -217,6 +226,7 @@ class calibrate:
 
         self.PFn20_torque_array = self.smoothed_torque_array
         self.PFn20_emg_array = self.emg_array
+        self.PFn20_cst_array = self.cst_array
 
         rospy.loginfo("REST")
         rospy.sleep(rest_time)
@@ -244,6 +254,7 @@ class calibrate:
         self.smoothed_torque_array = []
         self.sample_count = 0
         self.emg_array = []
+        self.cst_array = []
         self.start_time = start.to_sec()
         self.time = []
         duration = rospy.Duration.from_sec(trial_length)
@@ -254,6 +265,7 @@ class calibrate:
 
         self.DF0_torque_array = self.smoothed_torque_array
         self.DF0_emg_array = self.emg_array
+        self.DF0_cst_array = self.cst_array
 
         rospy.loginfo("REST")
         rospy.sleep(rest_time)
@@ -281,6 +293,7 @@ class calibrate:
         self.smoothed_torque_array = []
         self.sample_count = 0
         self.emg_array = []
+        self.cst_array = []
         self.start_time = start.to_sec()
         self.time = []
         duration = rospy.Duration.from_sec(trial_length)
@@ -291,13 +304,15 @@ class calibrate:
 
         self.DF20_torque_array = self.smoothed_torque_array
         self.DF20_emg_array = self.emg_array
+        self.DF20_cst_array = self.cst_array
 
         rospy.loginfo("Starting Calibration")
         self.calibration()
 
     def calibration(self):
         y = np.concatenate((self.PF20_torque_array, self.PF0_torque_array, self.PFn20_torque_array, self.DF0_torque_array, self.DF20_torque_array)) #.reshape(-1,1)
-        df = pd.DataFrame({'Torque': y})
+        emg_df = pd.DataFrame({'Torque': y})
+        cst_df = pd.DataFrame({'Torque': y})
         
         for i in range(len(channels)):
             x1 = signal.resample(self.PF20_emg_array[i], len(self.PF20_torque_array))
@@ -310,24 +325,53 @@ class calibrate:
 
             x = np.concatenate((x1, x2, x3, x4, x5)) #.reshape(-1,1)
             new_column = pd.DataFrame({'Channel'+str(channels[i]): x})
-            df = pd.concat([df, new_column], axis=1)
+            emg_df = pd.concat([emg_df, new_column], axis=1)
         
         angles = np.concatenate((10*np.ones(len(x1)), 0*np.ones(len(x2)), -10*np.ones(len(x3)), 0*np.ones(len(x4)), 10*np.ones(len(x5))))
         angles = pd.DataFrame({'Angles': angles})
-        df = pd.concat([df, angles],axis=1)
-        df = df.dropna()
+        emg_df = pd.concat([emg_df, angles],axis=1)
+        emg_df = emg_df.dropna()
+
+        for i in range(len(channels)):
+            x1 = signal.resample(self.PF20_cst_array[i], len(self.PF20_torque_array))
+            x2 = signal.resample(self.PF0_cst_array[i], len(self.PF0_torque_array))
+            x3 = signal.resample(self.PFn20_cst_array[i], len(self.PFn20_torque_array))
+            x4 = signal.resample(self.DF0_cst_array[i], len(self.DF0_torque_array))
+            x5 = signal.resample(self.DF20_cst_array[i], len(self.DF20_torque_array))
+
+            x = np.concatenate((x1, x2, x3, x4, x5))
+            new_column = pd.DataFrame({'Channel'+str(channels[i]): x})
+            cst_df = pd.concat([cst_df, new_column], axis=1)
+        
+        angles = np.concatenate((10*np.ones(len(x1)), 0*np.ones(len(x2)), -10*np.ones(len(x3)), 0*np.ones(len(x4)), 10*np.ones(len(x5))))
+        angles = pd.DataFrame({'Angles': angles})
+        cst_df = pd.concat([cst_df, angles],axis=1)
+        cst_df = cst_df.dropna()
+
+        rospy.loginfo('EMG: ')
+        print(emg_df)
+        rospy.loginfo('CST: ')
+        print(cst_df)
+
 
         model = lm.LinearRegression()
-        X = df.loc[:,df.columns != 'Torque']
-        y = df['Torque']
-        res=model.fit(X,y)
-        
-        print(res.coef_)
-        intercept = float(res.intercept_)
-        #slope = float(res.coef_[0][0])
+        X_emg = emg_df.loc[:,emg_df.columns != 'Torque']
+        y_emg = emg_df['Torque']
+        emg_res=model.fit(X_emg, y_emg) 
+        emg_intercept = emg_res.intercept_
+        emg_coef = emg_res.coef_
 
-        #rospy.loginfo(intercept)
-        #rospy.loginfo(slope)
+        print('EMG Intercept: ',emg_intercept)
+        print('EMG Coef: ', emg_coef)
+
+        X_cst = cst_df.loc[:,cst_df.columns != 'Torque']
+        y_cst = cst_df['Torque']
+        cst_res=model.fit(X_cst, y_cst) 
+        cst_intercept = cst_res.intercept_
+        cst_coef = cst_res.coef_
+
+        print('CST Intercept: ',cst_intercept)
+        print('CST Coef: ', cst_coef)
 
         #rospy.set_param('intercept',intercept)
         #rospy.set_param('slope',slope)
@@ -338,23 +382,23 @@ class calibrate:
         # if len(self.torque_array) > 0:
         #     torque -= self.torque_array[0]
         
-        if self.batch_ready:
-            self.torque_array.append(abs(torque))
-            if len(self.torque_array) > 0:
-                if (len(self.torque_array) <= torque_window):
-                    avg = np.sum(self.torque_array[0:]) / len(self.torque_array)
-                    self.smoothed_torque_array.append(avg)
-                else:
-                    avg = np.sum(self.torque_array[-1*torque_window:-1]) / torque_window
-                    self.smoothed_torque_array.append(avg)
-            
-                self.time.append(rospy.Time.now().to_sec() - self.start_time)
+        self.torque_array.append(abs(torque))
+        if len(self.torque_array) > 0:
+            if (len(self.torque_array) <= torque_window):
+                avg = np.sum(self.torque_array[0:]) / len(self.torque_array)
+                self.smoothed_torque_array.append(avg)
+            else:
+                avg = np.sum(self.torque_array[-1*torque_window:-1]) / torque_window
+                self.smoothed_torque_array.append(avg)
+        
+            self.time.append(rospy.Time.now().to_sec() - self.start_time)
 
-                if self.smoothed_torque_array[-1] > self.max_torque:
-                    rospy.set_param('Max_Torque', torque)    
-                    self.max_torque = torque
+            if self.smoothed_torque_array[-1] > self.max_torque:
+                rospy.set_param('Max_Torque', torque)    
+                self.max_torque = torque
 
     def emg_calib(self,hdEMG):
+        self.batch_ready = False
         num_groups = len(hdEMG.data) // 64
 
         samples = []
@@ -367,22 +411,28 @@ class calibrate:
             if self.sample_count < win:
                 self.sample[i][self.sample_count] = samples[c]
             else: # step size of 20 instead of 1
-                self.batch_ready = False
                 deleted = np.delete(self.sample[i], 0, axis=0)
                 self.sample[i] = np.append(deleted, [np.array(samples[c])],axis=0)
-                if self.sample_count % 20 == 0:
-                    self.batch_ready = True
+                self.batch_ready = True
+                
             i += 1
+
+        sample = []
+        for i in range(n):
+            sample.append(np.mean(self.sample[i]))
+        self.emg_array.append(sample)
+
+        # if self.sample_count % 20 == 0:
+        #     self.batch_ready = True
         
         if self.batch_ready:
-            sample = []
-            for i in range(n):
-                sample.append(np.mean(sample[i]))
-            self.emg_array.append(sample)
-            
             nueral_drive = model.predict_MUs(self.sample)
-            print(nueral_drive)
-        
+            nueral_drive = nueral_drive.numpy()
+            cst = []
+            for i in range(n):
+                cst.append(np.sum(nueral_drive[:,i]))
+            self.cst_array.append(cst)
+                
         self.sample_count += 1
 
 
