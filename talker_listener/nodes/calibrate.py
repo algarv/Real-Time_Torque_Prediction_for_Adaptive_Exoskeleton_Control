@@ -23,9 +23,9 @@ model_file = path + "/src/talker_listener/" + "best_model_cnn-allrun5_c8b_mix4-S
 model = MUdecomposer(model_file)
 
 win = 40
-channels = [1,2,3]
+channels = [1,2,3] #MUST BE THE SAME IN BOTH FILES
 n = len(channels)
-method = 'emg'
+
 skip = False
 
 class calibrate:
@@ -56,8 +56,10 @@ class calibrate:
         if skip:
             rospy.wait_for_message('/h3/robot_states', State,timeout=None)
             rospy.wait_for_message('hdEMG_stream',Float64MultiArray,timeout=None)
-            rospy.set_param('intercept',2)
-            rospy.set_param('slope',0)
+            rospy.set_param('emg_int', 2.0)
+            rospy.set_param('emg_coef', [0.0, 0.0, 0.0, 0.0])
+            rospy.set_param('cst_int', 2.0)
+            rospy.set_param('cst_coef', [0.0, 0.0, 0.0, 0.0])
             rospy.set_param('calibrated', True)
         else:
             rospy.wait_for_message('/h3/robot_states',State,timeout=None)
@@ -358,24 +360,26 @@ class calibrate:
         X_emg = emg_df.loc[:,emg_df.columns != 'Torque']
         y_emg = emg_df['Torque']
         emg_res=model.fit(X_emg, y_emg) 
-        emg_intercept = emg_res.intercept_
-        emg_coef = emg_res.coef_
+        emg_int = float(emg_res.intercept_)
+        emg_coef = [float(x) for x in emg_res.coef_.tolist()]
 
-        print('EMG Intercept: ',emg_intercept)
+        print('EMG Intercept: ',emg_int)
         print('EMG Coef: ', emg_coef)
 
         X_cst = cst_df.loc[:,cst_df.columns != 'Torque']
         y_cst = cst_df['Torque']
         cst_res=model.fit(X_cst, y_cst) 
-        cst_intercept = cst_res.intercept_
-        cst_coef = cst_res.coef_
+        cst_int = float(cst_res.intercept_)
+        cst_coef = [float(x) for x in cst_res.coef_.tolist()]
 
-        print('CST Intercept: ',cst_intercept)
+        print('CST Intercept: ',cst_int)
         print('CST Coef: ', cst_coef)
 
-        #rospy.set_param('intercept',intercept)
-        #rospy.set_param('slope',slope)
-        #rospy.set_param('calibrated', True)
+        rospy.set_param('emg_int',emg_int)
+        rospy.set_param('emg_coef',emg_coef)
+        rospy.set_param('cst_int',cst_int)
+        rospy.set_param('cst_coef',cst_coef)
+        rospy.set_param('calibrated', True)
 
     def torque_calib(self,sensor_reading):
         torque = sensor_reading.joint_torque_sensor[2]

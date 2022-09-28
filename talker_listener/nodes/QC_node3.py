@@ -14,9 +14,10 @@ model_file = path + "/src/talker_listener/" + "best_model_cnn-allrun5_c8b_mix4-S
 model = MUdecomposer(model_file)
 
 win = 40
-method = 'cst' 
+method = 'emg' 
 adaptive = False #True
-channels = [1,2,3,4]
+channels = [1,2,3] #MUST BE THE SAME IN BOTH FILES
+n = len(channels)
 
 mass = 2.37 #kg
 g = -9.81 #m/s^2
@@ -31,7 +32,6 @@ class QC_node:
         sensor_sub = rospy.Subscriber('/h3/robot_states', State, self.sensor_callback)
         self.first_run = True
         self.batch_ready = False
-        n = len(channels)
         self.sample_count = 0
         self.sample = np.zeros((n, win, 64))
 
@@ -96,22 +96,33 @@ class QC_node:
         self.theta_next = self.theta + self.theta_dot * self.dt
 
     def calc_torque_cst(self):
+        if self.batch_ready:
+            m = rospy.get_param('cst_coef')
+            b = rospy.get_param('cst_int')
 
-        nueral_drive = model.predict_MUs(self.sample)
-        print(nueral_drive)
-        #Linear regression to map neural drive to torque
+            nueral_drive = model.predict_MUs(self.sample)
+            nueral_drive = nueral_drive.numpy()
 
-        return random.randint(-10,10)
+            torque_cmd = 0
+            for i in range(n - 1):
+                torque_cmd += m[i]* np.sum(nueral_drive[:,i])
 
+            torque_cmd += self.theta * m[-1]
+            torque_cmd += b 
+
+            return torque_cmd
+    
     def calc_torque_emg(self):
         if self.batch_ready:
-            m = rospy.get_param('slope')
-            b = rospy.get_param('intercept')
-            try: 
-                torque_cmd = m * np.mean(self.sample) + b #need to take specific sample value
-            except:
-                rospy.loginfo("Waiting for sample")
-                torque_cmd = 0
+            m = rospy.get_param('emg_coef')
+            b = rospy.get_param('emg_int')
+            
+            torque_cmd = 0
+            for i in range(n - 1):
+                torque_cmd += m[i] * np.mean(self.sample[i])
+
+            torque_cmd += self.theta * m[-1]
+            torque_cmd += b 
             
             return torque_cmd
         else:
