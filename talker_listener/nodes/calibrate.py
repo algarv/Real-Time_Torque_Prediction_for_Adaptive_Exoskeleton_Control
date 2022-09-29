@@ -57,10 +57,8 @@ class calibrate:
         if skip:
             rospy.wait_for_message('/h3/robot_states', State,timeout=None)
             rospy.wait_for_message('hdEMG_stream',Float64MultiArray,timeout=None)
-            rospy.set_param('emg_int', 2.0)
-            rospy.set_param('emg_coef', [0.0, 0.0, 0.0, 0.0])
-            rospy.set_param('cst_int', 2.0)
-            rospy.set_param('cst_coef', [0.0, 0.0, 0.0, 0.0])
+            rospy.set_param('emg_coef', [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0])
+            rospy.set_param('cst_coef', [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0])
             rospy.set_param('calibrated', True)
         else:
             rospy.wait_for_message('/h3/robot_states',State,timeout=None)
@@ -325,9 +323,9 @@ class calibrate:
             f += ((betas[i] * X.iloc[[i]]) + (betas[i + 1 + n] * X.iloc[[-1]] * X.iloc[[i]].to_numpy()).to_numpy()).to_numpy()
         
         f += (betas[n] * X.iloc[[-1]]).to_numpy()
-        f += (betas[-1] * ones).to_numpy()
-        print(f)
-        return f
+        f += (betas[-2] * ones).to_numpy()
+
+        return f.to_numpy()[0]
     
     def calibration(self):
         y = np.concatenate((self.PF20_torque_array, self.PF0_torque_array, self.PFn20_torque_array, self.DF0_torque_array, self.DF20_torque_array)) #.reshape(-1,1)
@@ -383,10 +381,11 @@ class calibrate:
         #model = curve_fit()
         X_emg = emg_df.loc[:,emg_df.columns != 'Torque']
         y_emg = emg_df['Torque']
-        emg_res = curve_fit(self.interactionq, X_emg.T, y_emg, p0 = np.ones(2*(n+1)))
-        emg_coef = emg_res.popt
-        #print('EMG Intercept: ',emg_int)
+        emg_res = curve_fit(self.interactionq, X_emg.T, y_emg.to_numpy(), p0 = np.ones(2*(n+1)))
+        emg_coef = emg_res[0]
+        emg_coef = [float(x) for x in emg_coef]
         print('EMG Coef: ', emg_coef)
+        print('EMG Cov: ', emg_res[1])
 
         # X_cst = cst_df.loc[:,cst_df.columns != 'Torque']
         # y_cst = cst_df['Torque']
@@ -396,14 +395,15 @@ class calibrate:
 
         X_cst = cst_df.loc[:,cst_df.columns != 'Torque']
         y_cst = cst_df['Torque']
-        cst_res = curve_fit(self.interactionq, X_cst.T, y_cst.T, p0 = np.ones(2*(n+1)))
-        cst_coef = cst_res.popt
-        #print('CST Intercept: ',cst_int)
-        print('CST Coef: ', cst_coef)
 
-        rospy.set_param('emg_int',emg_int)
+        cst_res = curve_fit(self.interactionq, X_cst.T, y_cst, p0 = np.ones(2*(n+1)))
+        print(cst_res)
+        cst_coef = cst_res[0]
+        cst_coef = [float(x) for x in cst_coef]
+        print('CST Coef: ', cst_coef)
+        print('CST Cov: ', cst_res[1])
+
         rospy.set_param('emg_coef',emg_coef)
-        rospy.set_param('cst_int',cst_int)
         rospy.set_param('cst_coef',cst_coef)
         rospy.set_param('calibrated', True)
 

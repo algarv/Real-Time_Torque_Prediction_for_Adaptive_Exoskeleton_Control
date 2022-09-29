@@ -14,7 +14,7 @@ model_file = path + "/src/talker_listener/" + "best_model_cnn-allrun5_c8b_mix4-S
 model = MUdecomposer(model_file)
 
 win = 40
-method = 'emg' 
+method = 'cst' 
 adaptive = False #True
 channels = [1,2,3] #MUST BE THE SAME IN BOTH FILES
 n = len(channels)
@@ -34,6 +34,8 @@ class QC_node:
         self.batch_ready = False
         self.sample_count = 0
         self.sample = np.zeros((n, win, 64))
+        self.emg_array = []
+        self.cst_array = []
 
         self.torque_cmd = 0
         rospy.wait_for_message('/h3/robot_states', State,timeout=None)
@@ -53,8 +55,8 @@ class QC_node:
                 if method == 'emg':
                     self.torque_cmd = self.calc_torque_emg()
             
-                if adaptive:
-                    self.torque_cmd = (self.torque_cmd - self.T_if) #+ (mass * g * l * np.sin(self.theta_next))
+                # if adaptive:
+                #     self.torque_cmd = (self.torque_cmd - self.T_if) #+ (mass * g * l * np.sin(self.theta_next))
 
                 rospy.loginfo("Torque_CMD: ")
                 rospy.loginfo(self.torque_cmd)
@@ -64,14 +66,14 @@ class QC_node:
 
     def get_sample(self,hdEMG):
         
+        self.batch_ready = False
         num_groups = len(hdEMG.data) // 64
 
         samples = []
         for i in range(num_groups):
             muscle = list(hdEMG.data[64*i : 64*i + 64])
             samples.append(muscle)
-
-        #n x 40 x 64 muscles multiarray
+        
         i = 0
         for c in channels:
             if self.sample_count < win:
@@ -80,8 +82,26 @@ class QC_node:
                 deleted = np.delete(self.sample[i], 0, axis=0)
                 self.sample[i] = np.append(deleted, [np.array(samples[c])],axis=0)
                 self.batch_ready = True
+                
             i += 1
+
+        sample = []
+        for i in range(n):
+            sample.append(np.mean(self.sample[i]))
+        self.emg_array.append(sample)
+
+        # if self.sample_count % 20 == 0:
+        #     self.batch_ready = True
         
+        if self.batch_ready:
+            nueral_drive = model.predict_MUs(self.sample)
+            nueral_drive = nueral_drive.numpy()
+            cst = []
+            for i in range(n):
+                cst.append(np.sum(nueral_drive[:,i]))
+
+            self.cst_array.append(cst)
+                
         self.sample_count += 1
         
 
@@ -91,40 +111,46 @@ class QC_node:
         self.net_torque = sensor_reading.joint_torque_sensor[2]
 
 
-        self.T_if = self.net_torque - self.torque_cmd
+        #self.T_if = self.net_torque - self.torque_cmd
 
         self.theta_next = self.theta + self.theta_dot * self.dt
 
     def calc_torque_cst(self):
         if self.batch_ready:
-            m = rospy.get_param('cst_coef')
-            b = rospy.get_param('cst_int')
+            theta = self.theta
+            coef = rospy.get_param('cst_coef')
+            if len(self.cst_array) > 0:
+                cst_sample = self.cst_array[-1]
+            
+                nueral_drive = model.predict_MUs(self.sample)
+                nueral_drive = nueral_drive.numpy()
 
-            nueral_drive = model.predict_MUs(self.sample)
-            nueral_drive = nueral_drive.numpy()
+                torque_cmd = 0
+                for i in range(n):
+                    torque_cmd += coef[i]*cst_sample[i] + coef[i + 1 + n]*cst_sample[i]*theta
+                
+                torque_cmd += theta * coef[n]
+                torque_cmd += coef[-1]
 
-            torque_cmd = 0
-            for i in range(n - 1):
-                torque_cmd += m[i]* np.sum(nueral_drive[:,i])
-
-            torque_cmd += self.theta * m[-1]
-            torque_cmd += b 
-
-            return torque_cmd
+                return torque_cmd
+        else:
+            return 0
     
     def calc_torque_emg(self):
         if self.batch_ready:
-            m = rospy.get_param('emg_coef')
-            b = rospy.get_param('emg_int')
-            
-            torque_cmd = 0
-            for i in range(n - 1):
-                torque_cmd += m[i] * np.mean(self.sample[i])
+            theta = self.theta
+            coef = rospy.get_param('emg_coef')
+            if len(self.emg_array) > 0:
+                emg_sample = self.emg_array[-1]
+                
+                torque_cmd = 0
+                for i in range(n - 1):
+                    torque_cmd += coef[i]*emg_sample[i] + coef[i + 1 + n]*emg_sample[i]*theta
 
-            torque_cmd += self.theta * m[-1]
-            torque_cmd += b 
-            
-            return torque_cmd
+                torque_cmd += theta * coef[n]
+                torque_cmd += coef[-1]
+                
+                return torque_cmd
         else:
             return 0 
         
