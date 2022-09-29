@@ -6,6 +6,7 @@ import numpy as np
 import scipy as sp
 import pandas as pd
 from scipy import signal
+from scipy.optimize import curve_fit
 from std_msgs.msg import Float64, Float64MultiArray
 from talker_listener.qc_predict import MUdecomposer
 from sklearn import linear_model as lm
@@ -300,7 +301,7 @@ class calibrate:
         self.time = []
         duration = rospy.Duration.from_sec(trial_length)
         while (rospy.Time.now() < start + duration):
-            self.axs.plot(self.time, self.smoothed_torque_array[0:len(self.time)], color='red')
+            self.axs.plot(self.time[0:len(self.smoothed_torque_array)], self.smoothed_torque_array[0:len(self.time)], color='red')
             plt.pause(.01)
             self.r.sleep()
 
@@ -311,12 +312,29 @@ class calibrate:
         rospy.loginfo("Starting Calibration")
         self.calibration()
 
+    def interactionq(self, X, a, b=None, c=None, d=None, e=None, g=None, h=None, j=None, k=None, l=None, m=None):
+        ones = pd.DataFrame({'ones': np.zeros(len(X.columns)) }).T
+        zeros = pd.DataFrame({'output': np.zeros(len(X.columns)) }).T
+        f = zeros
+        
+        betas = [a, b, c, d, e, g, h, j, k, l, m]
+        betas = [beta for beta in betas if beta is not None]
+
+        for i in range(n):
+
+            f += ((betas[i] * X.iloc[[i]]) + (betas[i + 1 + n] * X.iloc[[-1]] * X.iloc[[i]].to_numpy()).to_numpy()).to_numpy()
+        
+        f += (betas[n] * X.iloc[[-1]]).to_numpy()
+        f += (betas[-1] * ones).to_numpy()
+        print(f)
+        return f
+    
     def calibration(self):
         y = np.concatenate((self.PF20_torque_array, self.PF0_torque_array, self.PFn20_torque_array, self.DF0_torque_array, self.DF20_torque_array)) #.reshape(-1,1)
         emg_df = pd.DataFrame({'Torque': y})
         cst_df = pd.DataFrame({'Torque': y})
         
-        for i in range(len(channels)):
+        for i in range(n):
             x1 = signal.resample(self.PF20_emg_array[i], len(self.PF20_torque_array))
             x2 = signal.resample(self.PF0_emg_array[i], len(self.PF0_torque_array))
             x3 = signal.resample(self.PFn20_emg_array[i], len(self.PFn20_torque_array))
@@ -334,7 +352,7 @@ class calibrate:
         emg_df = pd.concat([emg_df, angles],axis=1)
         emg_df = emg_df.dropna()
 
-        for i in range(len(channels)):
+        for i in range(n):
             x1 = signal.resample(self.PF20_cst_array[i], len(self.PF20_torque_array))
             x2 = signal.resample(self.PF0_cst_array[i], len(self.PF0_torque_array))
             x3 = signal.resample(self.PFn20_cst_array[i], len(self.PFn20_torque_array))
@@ -355,24 +373,32 @@ class calibrate:
         rospy.loginfo('CST: ')
         print(cst_df)
 
+        # model = lm.LinearRegression()
+        # X_emg = emg_df.loc[:,emg_df.columns != 'Torque']
+        # y_emg = emg_df['Torque']
+        # emg_res=model.fit(X_emg, y_emg) 
+        # emg_int = float(emg_res.intercept_)
+        # emg_coef = [float(x) for x in emg_res.coef_.tolist()]
 
-        model = lm.LinearRegression()
+        #model = curve_fit()
         X_emg = emg_df.loc[:,emg_df.columns != 'Torque']
         y_emg = emg_df['Torque']
-        emg_res=model.fit(X_emg, y_emg) 
-        emg_int = float(emg_res.intercept_)
-        emg_coef = [float(x) for x in emg_res.coef_.tolist()]
-
-        print('EMG Intercept: ',emg_int)
+        emg_res = curve_fit(self.interactionq, X_emg.T, y_emg, p0 = np.ones(2*(n+1)))
+        emg_coef = emg_res.popt
+        #print('EMG Intercept: ',emg_int)
         print('EMG Coef: ', emg_coef)
+
+        # X_cst = cst_df.loc[:,cst_df.columns != 'Torque']
+        # y_cst = cst_df['Torque']
+        # cst_res=model.fit(X_cst, y_cst) 
+        # cst_int = float(cst_res.intercept_)
+        # cst_coef = [float(x) for x in cst_res.coef_.tolist()]
 
         X_cst = cst_df.loc[:,cst_df.columns != 'Torque']
         y_cst = cst_df['Torque']
-        cst_res=model.fit(X_cst, y_cst) 
-        cst_int = float(cst_res.intercept_)
-        cst_coef = [float(x) for x in cst_res.coef_.tolist()]
-
-        print('CST Intercept: ',cst_int)
+        cst_res = curve_fit(self.interactionq, X_cst.T, y_cst.T, p0 = np.ones(2*(n+1)))
+        cst_coef = cst_res.popt
+        #print('CST Intercept: ',cst_int)
         print('CST Coef: ', cst_coef)
 
         rospy.set_param('emg_int',emg_int)
