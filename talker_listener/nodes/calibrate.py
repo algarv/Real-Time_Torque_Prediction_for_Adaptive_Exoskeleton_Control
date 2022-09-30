@@ -24,7 +24,7 @@ model_file = path + "/src/talker_listener/" + "best_model_cnn-allrun5_c8b_mix4-S
 model = MUdecomposer(model_file)
 
 win = 40
-channels = [1,2,3] #MUST BE THE SAME IN BOTH FILES
+channels = [1, 2, 3] #MUST BE THE SAME IN BOTH FILES
 n = len(channels)
 
 skip = False
@@ -311,20 +311,22 @@ class calibrate:
         self.calibration()
 
     def interactionq(self, X, a, b=None, c=None, d=None, e=None, g=None, h=None, j=None, k=None, l=None, m=None):
-        ones = pd.DataFrame({'ones': np.zeros(len(X.columns)) }).T
+        ones = pd.DataFrame({'ones': np.ones(len(X.columns)) }).T
         zeros = pd.DataFrame({'output': np.zeros(len(X.columns)) }).T
         f = zeros
         
         betas = [a, b, c, d, e, g, h, j, k, l, m]
         betas = [beta for beta in betas if beta is not None]
-
+        
         for i in range(n):
 
             f += ((betas[i] * X.iloc[[i]]) + (betas[i + 1 + n] * X.iloc[[-1]] * X.iloc[[i]].to_numpy()).to_numpy()).to_numpy()
         
         f += (betas[n] * X.iloc[[-1]]).to_numpy()
-        f += (betas[-2] * ones).to_numpy()
+        f += (betas[-1] * ones).to_numpy()
 
+        print(betas)
+        print(f)
         return f.to_numpy()[0]
     
     def calibration(self):
@@ -381,7 +383,10 @@ class calibrate:
         #model = curve_fit()
         X_emg = emg_df.loc[:,emg_df.columns != 'Torque']
         y_emg = emg_df['Torque']
-        emg_res = curve_fit(self.interactionq, X_emg.T, y_emg.to_numpy(), p0 = np.ones(2*(n+1)))
+        
+        p0 = np.zeros(2*(n+1))
+        p0[-1] = 1
+        emg_res = curve_fit(self.interactionq, X_emg.T, y_emg.to_numpy(), p0 = p0, check_finite=False)
         emg_coef = emg_res[0]
         emg_coef = [float(x) for x in emg_coef]
         print('EMG Coef: ', emg_coef)
@@ -396,7 +401,9 @@ class calibrate:
         X_cst = cst_df.loc[:,cst_df.columns != 'Torque']
         y_cst = cst_df['Torque']
 
-        cst_res = curve_fit(self.interactionq, X_cst.T, y_cst, p0 = np.ones(2*(n+1)))
+        p0 = np.zeros(2*(n+1))
+        p0[-1] = 1.0
+        cst_res = curve_fit(self.interactionq, X_cst.T, y_cst, p0 = p0, check_finite=False)
         print(cst_res)
         cst_coef = cst_res[0]
         cst_coef = [float(x) for x in cst_coef]

@@ -16,7 +16,7 @@ model = MUdecomposer(model_file)
 win = 40
 method = 'cst' 
 adaptive = False #True
-channels = [1,2,3] #MUST BE THE SAME IN BOTH FILES
+channels = [1, 2, 3] #MUST BE THE SAME IN BOTH FILES
 n = len(channels)
 
 mass = 2.37 #kg
