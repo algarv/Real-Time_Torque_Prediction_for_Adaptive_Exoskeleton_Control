@@ -9,12 +9,19 @@ import talker_listener.qc_communication as comm
 import pandas as pd
 import scipy as sp
 from std_msgs.msg import String, Float64, Float64MultiArray, MultiArrayDimension
+from scipy import signal
 
 # set save path
 path = "C:\\Users\\Jackson\\Documents\\Jackson\\northwestern\\SRALAB\\H3" # "C:/Users/jlevine/Desktop"
 # set file name
 #datafile = "why_32768.csv"
 smoothing_window = 2048 * 10**5 #samples (2048 Hz * 100 ms window)
+data = []
+timestamp = []
+
+nyquist = .5 * 2048
+window = [20/nyquist, 50/nyquist]
+b, a = signal.butter(4, window, btype='bandpass')
 
 def startup():
     # number of channels (408 for the quattrocento device)
@@ -28,8 +35,7 @@ def startup():
     # set buffer size (seconds)
     buffsize = 5
 
-    data = []
-    timestamp = []
+
 
     start_comm = 'startTX'
     stop_comm = 'stopTX'
@@ -81,9 +87,10 @@ def record_print(q_socket, nchan, nbytes):
         output_milli_volts=False)
     # print(sample_from_channels[384])
     # timestamp.append(time.time())
-    #data.append(sample_from_channels)
+    data.append(sample_from_channels)
+    filtered = signal.filtfilt(b, a, data, axis=0).tolist()
     #print(sample_from_channels)
-    return sample_from_channels
+    return filtered[-1]
     #pub.publish(sample_from_channels)
 
     #print(time.time()-time1)

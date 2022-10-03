@@ -4,11 +4,13 @@ from rospy.core import logdebug
 import csv
 import scipy as sp
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 from scipy import signal
 
 def main():
     rospy.init_node('emg_stream', log_level=rospy.DEBUG)
-    r = rospy.Rate(100)
+    r = rospy.Rate(2048)
     pub = rospy.Publisher('hdEMG_stream', Float64MultiArray, queue_size=10)
     
     nyquist = .5 * 2048
@@ -22,10 +24,17 @@ def main():
         temp_list = []
         for num in row:
             temp_list.append(float(num))
-        data.append(temp_list)
+        if len(temp_list) > 0:
+            data.append(np.array(temp_list))
+    
+    data = np.array(data)
+    
+    b, a = signal.butter(4, window, btype='bandpass')
+    filtered = signal.filtfilt(b, a, data, axis=0).tolist()
+
     i = 0
     while not rospy.is_shutdown():    
-        reading = data[i]
+        reading = filtered[i]
         #csv_reader = np.genfromtxt(stream,delimiter=',')
         #reading1 = []
         #reading2 = []
@@ -42,9 +51,6 @@ def main():
         # reading4.pop(0)
 
         #reading = reading1 + reading2 + reading3 + reading4
-
-        #b, a = signal.butter(4, window, btype='bandpass')
-        #filtered = signal.filtfilt(b, a, reading).tolist()
 
         sample = Float64MultiArray()
         sample.data = reading #filtered

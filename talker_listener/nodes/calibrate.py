@@ -27,7 +27,7 @@ win = 40
 channels = [1, 2, 3] #MUST BE THE SAME IN BOTH FILES
 n = len(channels)
 
-skip = False
+skip = True
 
 class calibrate:
     def __init__(self):
@@ -325,8 +325,6 @@ class calibrate:
         f += (betas[n] * X.iloc[[-1]]).to_numpy()
         f += (betas[-1] * ones).to_numpy()
 
-        print(betas)
-        print(f)
         return f.to_numpy()[0]
     
     def calibration(self):
@@ -450,19 +448,19 @@ class calibrate:
             else: # step size of 20 instead of 1
                 deleted = np.delete(self.sample[i], 0, axis=0)
                 self.sample[i] = np.append(deleted, [np.array(samples[c])],axis=0)
-                self.batch_ready = True
+                if (self.sample_count % 20) == 0:
+                    self.batch_ready = True
                 
             i += 1
 
-        sample = []
-        for i in range(n):
-            sample.append(np.mean(self.sample[i]))
-        self.emg_array.append(sample)
-
-        # if self.sample_count % 20 == 0:
-        #     self.batch_ready = True
-        
         if self.batch_ready:
+
+            sample = []
+            for i in range(n):
+                sample.append(np.sqrt(np.mean([j**2 for j in self.sample[i]])))
+            self.emg_array.append(sample)
+
+            
             nueral_drive = model.predict_MUs(self.sample)
             nueral_drive = nueral_drive.numpy()
             cst = []
