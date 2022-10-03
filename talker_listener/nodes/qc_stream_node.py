@@ -89,6 +89,7 @@ def record_print(q_socket, nchan, nbytes):
     # timestamp.append(time.time())
     data.append(sample_from_channels)
     filtered = signal.filtfilt(b, a, data, axis=0).tolist()
+
     #print(sample_from_channels)
     return filtered[-1]
     #pub.publish(sample_from_channels)
@@ -122,19 +123,36 @@ def record_print(q_socket, nchan, nbytes):
 
 if __name__ == '__main__':
     rospy.init_node('QC_stream_node')
-    r = rospy.Rate(10) #10Hz
-    pub = rospy.Publisher('hdEMG_stream', Float64MultiArray, queue_size=10)
     r = rospy.Rate(2048)
+    pub = rospy.Publisher('hdEMG_stream', Float64MultiArray, queue_size=1)
     
+    avg_window = 10**5
+
     q_socket, nchan, nbytes = startup()
 
+    win = []
+    sample_count = 0
     while not rospy.is_shutdown():
-        sample = Float64MultiArray()
-        sample.data = record_print(q_socket, nchan, nbytes)
+        
+        reading = record_print(q_socket, nchan, nbytes)
 
-        #dim = []
-        #dim.append(MultiArrayDimension("rows",16*4,3))
-        #dim.append(MultiArrayDimension("columns",1,1))
-        #sample.layout.dim = dim        
-        pub.publish(sample)
+        if sample_count < avg_window:
+            win.append(reading)
+        else:
+            win.pop(0)
+            win.append(reading)
+            sample_ready = True
+        
+        if sample_ready:
+            smoothed_reading = np.mean(win, axis=0)
+        
+            sample = Float64MultiArray()
+            sample.data = smoothed_reading
+
+            #dim = []
+            #dim.append(MultiArrayDimension("rows",16*4,3))
+            #dim.append(MultiArrayDimension("columns",1,1))
+            #sample.layout.dim = dim        
+            pub.publish(sample)
+        sample_count += 1
         r.sleep()

@@ -11,10 +11,13 @@ from scipy import signal
 def main():
     rospy.init_node('emg_stream', log_level=rospy.DEBUG)
     r = rospy.Rate(2048)
-    pub = rospy.Publisher('hdEMG_stream', Float64MultiArray, queue_size=10)
+    pub = rospy.Publisher('hdEMG_stream', Float64MultiArray, queue_size=1)
     
     nyquist = .5 * 2048
-    window = [20/nyquist, 50/nyquist]
+    filter_window = [20/nyquist, 50/nyquist]
+    avg_window = 10**5
+
+    win = []
 
     data = []
     path = rospy.get_param("/file_dir")
@@ -29,9 +32,11 @@ def main():
     
     data = np.array(data)
     
-    b, a = signal.butter(4, window, btype='bandpass')
+    b, a = signal.butter(4, filter_window, btype='bandpass')
     filtered = signal.filtfilt(b, a, data, axis=0).tolist()
 
+    sample_ready = False
+    sample_count = 0
     i = 0
     while not rospy.is_shutdown():    
         reading = filtered[i]
@@ -52,17 +57,31 @@ def main():
 
         #reading = reading1 + reading2 + reading3 + reading4
 
-        sample = Float64MultiArray()
-        sample.data = reading #filtered
+        if sample_count < avg_window:
+            win.append(reading)
+        else:
+            win.pop(0)
+            win.append(reading)
+            sample_ready = True
+        
+        if sample_ready:
+            smoothed_reading = np.mean(win, axis=0)
+            # for j in range(len(reading)):
+            #     smoothed_reading.append(np.mean([win[k][j] for k in range(avg_window)]))
 
-        dim = []
-        dim.append(MultiArrayDimension("rows", 4, 16*4))
-        dim.append(MultiArrayDimension("columns", 1, 1))
+            sample = Float64MultiArray()
+            sample.data = smoothed_reading
 
-        sample.layout.dim = dim
+            dim = []
+            dim.append(MultiArrayDimension("rows", 4, 16*4))
+            dim.append(MultiArrayDimension("columns", 1, 1))
 
-        pub.publish(sample)
+            sample.layout.dim = dim
+
+            pub.publish(sample)
+        
         i += 1 #4
+        sample_count += 1
         if i >= len(data): #len(row) - 4:
             i = 0
         r.sleep()
