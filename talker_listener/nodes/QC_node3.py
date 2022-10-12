@@ -16,15 +16,16 @@ path = rospy.get_param("/file_dir")
 model_file = path + "/src/talker_listener/" + "best_model_cnn-allrun5_c8b_mix4-SG0-ST20-WS40-MU[0, 1, 2, 3]_1644222946_f.h5"
 model = MUdecomposer(model_file)
 
+torque_max = rospy.get_param('Max_Torque', 25.0)
+
 win = 40
-method = 'cst' 
+method = 'emg' 
 adaptive = False #True
-channels = [1, 2, 3] #MUST BE THE SAME IN BOTH FILES
-n = len(channels)
+muscles = [0, 1, 2] #MUST BE THE SAME IN BOTH FILES
+n = len(muscles)
 
 nyquist = .5 * 2048
 window = [20/nyquist, 50/nyquist]
-
 
 mass = 2.37 #kg
 g = -9.81 #m/s^2
@@ -68,20 +69,27 @@ class QC_node:
                         self.torque_cmd = self.calc_torque_emg()
             
                 # df = pd.DataFrame(self.emg_array)
-                # df.columns = ["Muscle" + str(num) for num in channels]
+                # df.columns = ["Muscle" + str(num) for num in muscles]
                 # df.plot(subplots=True, title="RMS EMG After Bandpass Filter", ax=self.axs)
 
                 # if adaptive:
                 #     self.torque_cmd = (self.torque_cmd - self.T_if) #+ (mass * g * l * np.sin(self.theta_next))
 
                 # plt.pause(.01)
-                rospy.loginfo("Torque_CMD: ")
-                rospy.loginfo(self.torque_cmd)
+
                 r.sleep()
 
     def send_torque_cmd(self, event=None):
 
-        self.torque_pub.publish(self.torque_cmd)
+        if rospy.get_param('calibrated') == True:
+            rospy.loginfo("Torque_CMD: ")
+            rospy.loginfo(self.torque_cmd)
+            # if self.torque_cmd is not None:
+            #     if self.torque_cmd > torque_max: 
+            #         self.torque_cmd = torque_max
+            #         rospy.WARN("TORQUE_CMD Exceeded Max")
+
+            self.torque_pub.publish(self.torque_cmd)
 
     def get_sample(self,hdEMG):
 
@@ -94,23 +102,23 @@ class QC_node:
             samples.append(muscle)
         
         i = 0
-        for c in channels:
+        for c in muscles:
             if self.sample_count < win:
                 self.sample[i][self.sample_count] = samples[c]
             else: # step size of 20
                 deleted = np.delete(self.sample[i], 0, axis=0)
                 self.sample[i] = np.append(deleted, [np.array(samples[c])],axis=0)
-                if (self.sample_count % 20) == 0:
-                    self.batch_ready = True
+                # if (self.sample_count % 20) == 0:
+                self.batch_ready = True
                 
             i += 1
 
-        if self.batch_ready:
+        sample = []
+        for i in range(n):
+            sample.append(np.sqrt(np.mean([j**2 for j in self.sample[i] if j is not 0])))
+        self.emg_array.append(sample)
 
-            sample = []
-            for i in range(n):
-                sample.append(np.sqrt(np.mean([j**2 for j in self.sample[i] if j is not 0])))
-            self.emg_array.append(sample)
+        if self.batch_ready:
             
             nueral_drive = model.predict_MUs(self.sample)
             nueral_drive = nueral_drive.numpy()
@@ -157,7 +165,7 @@ class QC_node:
             emg_sample = self.emg_array[-1]
             
             torque_cmd = 0
-            for i in range(n - 1):
+            for i in range(n):
                 torque_cmd += coef[i]*emg_sample[i] + coef[i + 1 + n]*emg_sample[i]*theta
 
             torque_cmd += theta * coef[n]

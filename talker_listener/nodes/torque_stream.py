@@ -2,6 +2,7 @@ import rospy
 import random
 from h3_msgs.msg import State
 from rospy.core import logdebug 
+import csv
 
 def main():
     rospy.init_node('torque_stream', log_level=rospy.DEBUG)
@@ -9,12 +10,20 @@ def main():
     pub = rospy.Publisher('/h3/robot_states', State, queue_size=10)
 
     reading = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    step =  .20 * (2.0) / 5
+    # step =  .20 * (2.0) / 5
     i = 0
+
+    path = rospy.get_param("/file_dir")
+    stream = open(path + "/src/talker_listener/spliced_together_raw-Ish_torque_data.csv")
+    csv_reader = csv.reader(stream, delimiter=' ')
+    data = []
+    for row in csv_reader:
+        data.append(float(row[0]))
+    i_max = len(data)
+    print(data)
     while not rospy.is_shutdown():
 
-        
-        reading[2] = 2
+        reading[2] = data[i] #random.randint(-3,3) #-2.0
         # if i < 3:
         #     reading[2] = 0
         # elif i < 8: 
@@ -33,11 +42,14 @@ def main():
         sample.joint_motor_torque = reading
         sample.joint_torque_sensor = reading
 
-        i += .01
+        i += 1 #.01
         pub.publish(sample)
-        if i > 26:
-            i = 0
-        r.sleep()
+        # if i > 26:
+        #     i = 0
+        if i == i_max:
+            break
+        else:
+            r.sleep()
 
 
 if __name__ == '__main__':

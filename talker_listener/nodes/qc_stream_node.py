@@ -22,6 +22,7 @@ timestamp = []
 nyquist = .5 * 2048
 window = [20/nyquist, 50/nyquist]
 b, a = signal.butter(4, window, btype='bandpass')
+num_samples = 0 
 
 def startup():
     # number of channels (408 for the quattrocento device)
@@ -85,10 +86,16 @@ def record_print(q_socket, nchan, nbytes):
         nchan,
         nbytes,
         output_milli_volts=False)
+    
     # print(sample_from_channels[384])
     # timestamp.append(time.time())
     data.append(sample_from_channels)
-    filtered = signal.filtfilt(b, a, data, axis=0).tolist()
+    try:
+        filtered = signal.filtfilt(b, a, data, axis=0).tolist()
+        rospy.logdebug("Filter is working")
+    except:
+        rospy.logdebug("Not filtering")
+        filtered = data
 
     #print(sample_from_channels)
     return filtered[-1]
@@ -126,33 +133,43 @@ if __name__ == '__main__':
     r = rospy.Rate(2048)
     pub = rospy.Publisher('hdEMG_stream', Float64MultiArray, queue_size=1)
     
-    avg_window = 10**5
+    avg_window = 100 #10**5
 
     q_socket, nchan, nbytes = startup()
 
     win = []
     sample_count = 0
-    while not rospy.is_shutdown():
-        
-        reading = record_print(q_socket, nchan, nbytes)
+    sample_ready = False
+    raw_emg_array = []
+    try:
+        while not rospy.is_shutdown():
 
-        if sample_count < avg_window:
-            win.append(reading)
-        else:
-            win.pop(0)
-            win.append(reading)
-            sample_ready = True
-        
-        if sample_ready:
-            smoothed_reading = np.mean(win, axis=0)
-        
-            sample = Float64MultiArray()
-            sample.data = smoothed_reading
+            reading = record_print(q_socket, nchan, nbytes)
+            raw_emg_array.append(reading)
 
-            #dim = []
-            #dim.append(MultiArrayDimension("rows",16*4,3))
-            #dim.append(MultiArrayDimension("columns",1,1))
-            #sample.layout.dim = dim        
-            pub.publish(sample)
-        sample_count += 1
-        r.sleep()
+
+            if sample_count < avg_window:
+                win.append(reading)
+            else:
+                win.pop(0)
+                win.append(reading)
+                sample_ready = True
+            
+            if sample_ready:
+                smoothed_reading = np.mean(win, axis=0)
+            
+                sample = Float64MultiArray()
+                sample.data = smoothed_reading
+
+                #dim = []
+                #dim.append(MultiArrayDimension("rows",16*4,3))
+                #dim.append(MultiArrayDimension("columns",1,1))
+                #sample.layout.dim = dim        
+                pub.publish(sample)
+            sample_count += 1
+
+            r.sleep()
+    except rospy.ROSInterruptException:
+        path = rospy.get_param("/file_dir")
+        raw_emg_df = pd.DataFrame(raw_emg_array)
+        raw_emg_df.to_csv(path + "/src/talker_listener/raw_emg.csv")

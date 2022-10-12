@@ -13,16 +13,20 @@ def main():
     r = rospy.Rate(2048)
     pub = rospy.Publisher('hdEMG_stream', Float64MultiArray, queue_size=1)
     
-    nyquist = .5 * 2048
-    filter_window = [20/nyquist, 50/nyquist]
-    avg_window = 10**5
+    nyquist = .5 * 2048.0
+    filter_window = [20.0/nyquist, 50.0/nyquist]
+    avg_window = 100 #10**5
 
     win = []
 
     data = []
     path = rospy.get_param("/file_dir")
-    stream = open(path + "/src/talker_listener/G_04_0PF.csv")
-    csv_reader = csv.reader(stream, delimiter=';')
+    stream = open(path + "/src/talker_listener/raw_emg_4_edited.csv")
+    csv_reader = csv.reader(stream, delimiter=',')
+    
+    # csv_chunk = pd.read_csv(stream, chunksize=10000)
+    # for chunk in csv_chunk:
+    #     csv_reader = chunk.to_numpy()
     for row in csv_reader:
         temp_list = []
         for num in row:
@@ -31,7 +35,8 @@ def main():
             data.append(np.array(temp_list))
     
     data = np.array(data)
-    
+    print(data.shape)
+
     b, a = signal.butter(4, filter_window, btype='bandpass')
     filtered = signal.filtfilt(b, a, data, axis=0).tolist()
 
@@ -66,8 +71,6 @@ def main():
         
         if sample_ready:
             smoothed_reading = np.mean(win, axis=0)
-            # for j in range(len(reading)):
-            #     smoothed_reading.append(np.mean([win[k][j] for k in range(avg_window)]))
 
             sample = Float64MultiArray()
             sample.data = smoothed_reading
