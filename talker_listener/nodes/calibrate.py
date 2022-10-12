@@ -24,12 +24,15 @@ path = rospy.get_param("/file_dir")
 model_file = path + "/src/talker_listener/" + "best_model_cnn-allrun5_c8b_mix4-SG0-ST20-WS40-MU[0, 1, 2, 3]_1644222946_f.h5"
 model = MUdecomposer(model_file)
 
+nyquist = .5 * 2048.0
+filter_window = [20.0/nyquist, 50.0/nyquist]
 win = 40
-muscles = [0, 1, 2] #MUST BE THE SAME IN BOTH FILES
+emg_avg_window = 100
+muscles = [2, 3, 4] #MUST BE THE SAME IN BOTH FILES
 n = len(muscles)
 
 #noisy_channels = [[1, 15], [40], [16, 17, 30, 56, 62]]
-noisy_channels = [[0, 14], [39], [15, 16, 29, 55, 61]]
+noisy_channels = [[],[],[61]] #[[0, 14], [39], [15, 16, 29, 55, 61]]
 
 skip = False
 
@@ -53,8 +56,10 @@ class calibrate:
         self.DF0_array = []
         self.DF10_array = []
         self.emg_array = []
+        self.emg_win = []
         self.cst_array = []
         self.raw_torque_array = []
+        self.raw_emg_array = []
         self.sample = np.zeros((n, win, 64))
         self.batch_ready = False
         self.time = []
@@ -151,18 +156,19 @@ class calibrate:
         self.axs.set_xlim(0, 25)
         self.axs.set_ylim(0, 1.25*self.max_PF0)
 
+        rospy.sleep(3)
+
         start = rospy.Time.now()
         self.torque_array = []
         self.smoothed_torque_array = []
         self.sample_count = 0
         self.emg_array = []
+        self.emg_win = []
         self.cst_array = []
         self.start_time = start.to_sec()
         self.time = []
         duration = rospy.Duration.from_sec(trial_length)
         i = 0
-
-        rospy.sleep(3)
 
         while (rospy.Time.now() < (start + duration)):
             i += 1
@@ -173,12 +179,12 @@ class calibrate:
             plt.pause(.01)
             self.r.sleep()
 
+        rospy.sleep(3)
+
         self.PF0_torque_array = self.smoothed_torque_array.copy()
         self.PF0_emg_array = np.array(self.emg_array.copy())
         self.PF0_cst_array = np.array(self.cst_array.copy())
         
-        print(self.PF0_emg_array)
-
         rospy.loginfo("REST")
         rospy.sleep(rest_time)
         plt.close()
@@ -200,18 +206,19 @@ class calibrate:
         self.axs.set_xlim(0, 26)
         self.axs.set_ylim(0, 1.25*self.max_PF20)
 
+        rospy.sleep(3)
+
         #self.calib_index = len(self.torque_array)
         start = rospy.Time.now()
         self.torque_array = []
         self.smoothed_torque_array = []
         self.sample_count = 0
         self.emg_array = []
+        self.emg_win = []
         self.cst_array = []
         self.start_time = start.to_sec()
         self.time = []
         duration = rospy.Duration.from_sec(trial_length)
-
-        rospy.sleep(3)
 
         while (rospy.Time.now() < start + duration):
             try:
@@ -220,6 +227,8 @@ class calibrate:
                 pass
             plt.pause(.01)
             self.r.sleep()
+
+        rospy.sleep(3)
 
         self.PF20_torque_array = self.smoothed_torque_array.copy()
         self.PF20_emg_array = np.array(self.emg_array.copy())
@@ -246,18 +255,19 @@ class calibrate:
         self.axs.set_xlim(0, 26)
         self.axs.set_ylim(0, 1.25*self.max_PFn20)
 
+        rospy.sleep(3)
+
         #self.calib_index = len(self.torque_array)
         start = rospy.Time.now()
         self.torque_array = []
         self.smoothed_torque_array = []
         self.sample_count = 0
         self.emg_array = []
+        self.emg_win = []
         self.cst_array = []
         self.start_time = start.to_sec()
         self.time = []
         duration = rospy.Duration.from_sec(trial_length)
-
-        rospy.sleep(3)
 
         while (rospy.Time.now() < start + duration):
             try:
@@ -266,6 +276,8 @@ class calibrate:
                 pass
             plt.pause(.01)
             self.r.sleep()
+
+        rospy.sleep(3)
 
         self.PFn20_torque_array = self.smoothed_torque_array.copy()
         self.PFn20_emg_array = np.array(self.emg_array.copy())
@@ -292,17 +304,18 @@ class calibrate:
         self.axs.set_xlim(0, 26)
         self.axs.set_ylim(0, 1.25*self.max_PF0)
 
+        rospy.sleep(3)
+
         start = rospy.Time.now()
         self.torque_array = []
         self.smoothed_torque_array = []
         self.sample_count = 0
         self.emg_array = []
+        self.emg_win = []
         self.cst_array = []
         self.start_time = start.to_sec()
         self.time = []
         duration = rospy.Duration.from_sec(trial_length)
-
-        rospy.sleep(3)
 
         while (rospy.Time.now() < start + duration):
             try:
@@ -311,6 +324,8 @@ class calibrate:
                 pass
             plt.pause(.01)
             self.r.sleep()
+
+        rospy.sleep(3)
 
         self.DF0_torque_array = self.smoothed_torque_array.copy()
         self.DF0_emg_array = np.array(self.emg_array.copy())
@@ -337,17 +352,18 @@ class calibrate:
         self.axs.set_xlim(0, 26)
         self.axs.set_ylim(0, 1.25*self.max_PF0)
 
+        rospy.sleep(3)
+
         start = rospy.Time.now()
         self.torque_array = []
         self.smoothed_torque_array = []
         self.sample_count = 0
         self.emg_array = []
+        self.emg_win = []
         self.cst_array = []
         self.start_time = start.to_sec()
         self.time = []
         duration = rospy.Duration.from_sec(trial_length)
-
-        rospy.sleep(3)
 
         while (rospy.Time.now() < start + duration):
             try:
@@ -356,6 +372,8 @@ class calibrate:
                 pass
             plt.pause(.01)
             self.r.sleep()
+
+        rospy.sleep(3)
 
         self.DF20_torque_array = self.smoothed_torque_array.copy()
         self.DF20_emg_array = np.array(self.emg_array.copy())
@@ -411,13 +429,21 @@ class calibrate:
         return self.f(X, betas) #f.to_numpy()[0]
     
     def calibration(self):
+        path = rospy.get_param("/file_dir")
+        raw_torque_df = pd.DataFrame(self.raw_torque_array)
+        raw_torque_df.to_csv(path + "/src/talker_listener/raw_torque.csv")
+
+        raw_emg_df = pd.DataFrame(self.raw_emg_array)
+        raw_emg_df.to_csv(path + "/src/talker_listener/raw_emg.csv")
+        
         y = np.concatenate((self.PF20_torque_array, self.PF0_torque_array, self.PFn20_torque_array, self.DF0_torque_array, self.DF20_torque_array)) #.reshape(-1,1)
         emg_df = pd.DataFrame({'Torque': y})
         cst_df = pd.DataFrame({'Torque': y})
         
-        print("PF20 Muscle 2 array before: ")
-        print(self.PF20_emg_array[:,2])
-        print(len(self.PF20_emg_array[:,2]))
+        print("Before: ")
+        print(self.PF20_emg_array.shape)
+        print(len(self.PF20_torque_array))
+
         for i in range(n):
             x1 = signal.resample(self.PF20_emg_array[:,i], len(self.PF20_torque_array))
             x2 = signal.resample(self.PF0_emg_array[:,i], len(self.PF0_torque_array))
@@ -432,7 +458,7 @@ class calibrate:
             emg_df = pd.concat([emg_df, new_column], axis=1)
         
         print("PF20 Muscle 2 array after: ")
-        print(x1)
+        # print(x1)
         print(len(x1))
 
         angles = np.concatenate((10*np.ones(len(x1)), 0*np.ones(len(x2)), -10*np.ones(len(x3)), 0*np.ones(len(x4)), 10*np.ones(len(x5))))
@@ -443,32 +469,32 @@ class calibrate:
         path = rospy.get_param("/file_dir")
         emg_df.to_csv(path + "/src/talker_listener/test_data_EMG.csv")
 
-        for i in range(n):
-            x1 = signal.resample(self.PF20_cst_array[i], len(self.PF20_torque_array))
-            x2 = signal.resample(self.PF0_cst_array[i], len(self.PF0_torque_array))
-            x3 = signal.resample(self.PFn20_cst_array[i], len(self.PFn20_torque_array))
-            x4 = signal.resample(self.DF0_cst_array[i], len(self.DF0_torque_array))
-            x5 = signal.resample(self.DF20_cst_array[i], len(self.DF20_torque_array))
+        # for i in range(n):
+        #     x1 = signal.resample(self.PF20_cst_array[i], len(self.PF20_torque_array))
+        #     x2 = signal.resample(self.PF0_cst_array[i], len(self.PF0_torque_array))
+        #     x3 = signal.resample(self.PFn20_cst_array[i], len(self.PFn20_torque_array))
+        #     x4 = signal.resample(self.DF0_cst_array[i], len(self.DF0_torque_array))
+        #     x5 = signal.resample(self.DF20_cst_array[i], len(self.DF20_torque_array))
 
-            x = np.concatenate((x1, x2, x3, x4, x5))
-            new_column = pd.DataFrame({'Muscle'+str(muscles[i]): x})
-            cst_df = pd.concat([cst_df, new_column], axis=1)
+        #     x = np.concatenate((x1, x2, x3, x4, x5))
+        #     new_column = pd.DataFrame({'Muscle'+str(muscles[i]): x})
+        #     cst_df = pd.concat([cst_df, new_column], axis=1)
         
-        angles = np.concatenate((10*np.ones(len(x1)), 0*np.ones(len(x2)), -10*np.ones(len(x3)), 0*np.ones(len(x4)), 10*np.ones(len(x5))))
-        angles = pd.DataFrame({'Angles': angles})
-        cst_df = pd.concat([cst_df, angles],axis=1)
-        cst_df = cst_df.dropna()
+        # angles = np.concatenate((10*np.ones(len(x1)), 0*np.ones(len(x2)), -10*np.ones(len(x3)), 0*np.ones(len(x4)), 10*np.ones(len(x5))))
+        # angles = pd.DataFrame({'Angles': angles})
+        # cst_df = pd.concat([cst_df, angles],axis=1)
+        # cst_df = cst_df.dropna()
 
-        path = rospy.get_param("/file_dir")
-        cst_df.to_csv(path + "/src/talker_listener/test_data_CST.csv")
+        # path = rospy.get_param("/file_dir")
+        # cst_df.to_csv(path + "/src/talker_listener/test_data_CST.csv")
 
         cst_df, cst_test_df = train_test_split(cst_df, test_size=.20)
         emg_df, emg_test_df = train_test_split(emg_df, test_size=.20)
 
         rospy.loginfo('EMG: ')
         print(emg_df)
-        rospy.loginfo('CST: ')
-        print(cst_df)
+        # rospy.loginfo('CST: ')
+        # print(cst_df)
 
         # model = lm.LinearRegression()
         # X_emg = emg_df.loc[:,emg_df.columns != 'Torque']
@@ -494,35 +520,36 @@ class calibrate:
         # cst_int = float(cst_res.intercept_)
         # cst_coef = [float(x) for x in cst_res.coef_.tolist()]
 
-        X_cst = cst_df.loc[:,cst_df.columns != 'Torque']
-        y_cst = cst_df['Torque']
+        # X_cst = cst_df.loc[:,cst_df.columns != 'Torque']
+        # y_cst = cst_df['Torque']
 
-        p0 = np.zeros(2*(n+1))
-        p0[-1] = 1.0
-        cst_res = curve_fit(self.objective, X_cst.T, y_cst, p0 = p0, check_finite=False)
-        print(cst_res)
-        cst_coef = cst_res[0]
-        cst_coef = [float(x) for x in cst_coef]
-        print('CST Coef: ', cst_coef)
-        print('CST Cov: ', cst_res[1])
+        # p0 = np.zeros(2*(n+1))
+        # p0[-1] = 1.0
+        # cst_res = curve_fit(self.objective, X_cst.T, y_cst, p0 = p0, check_finite=False)
+        # print(cst_res)
+        # cst_coef = cst_res[0]
+        # cst_coef = [float(x) for x in cst_coef]
+        # print('CST Coef: ', cst_coef)
+        # print('CST Cov: ', cst_res[1])
 
-        cst_r2, cst_RMSE = self.calc_r2(cst_test_df['Torque'], cst_test_df.loc[:,cst_test_df.columns != 'Torque'], cst_coef)
+        # cst_r2, cst_RMSE = self.calc_r2(cst_test_df['Torque'], cst_test_df.loc[:,cst_test_df.columns != 'Torque'], cst_coef)
         emg_r2, emg_RMSE = self.calc_r2(emg_test_df['Torque'], emg_test_df.loc[:,emg_test_df.columns != 'Torque'], emg_coef)
-        rospy.loginfo("CST R^2, RMSE: ")
-        rospy.loginfo(cst_r2)
-        rospy.loginfo(cst_RMSE)
+        # rospy.loginfo("CST R^2, RMSE: ")
+        # rospy.loginfo(cst_r2)
+        # rospy.loginfo(cst_RMSE)
         rospy.loginfo("EMG R^2, RMSE: ")
         rospy.loginfo(emg_r2)
         rospy.loginfo(emg_RMSE)
 
+        plt.plot(emg_df)
+        plt.show()
+
         rospy.set_param('emg_coef',emg_coef)
-        rospy.set_param('cst_coef',cst_coef)
+        # rospy.set_param('cst_coef',cst_coef)
         rospy.set_param('calibrated', True)
 
     def torque_calib(self,sensor_reading):
         torque = sensor_reading.joint_torque_sensor[2]
-        # if len(self.torque_array) > 0:
-        #     torque -= self.torque_array[0]
         
         self.raw_torque_array.append(torque)
         self.torque_array.append(torque)
@@ -541,15 +568,37 @@ class calibrate:
                 self.max_torque = torque
 
     def emg_calib(self,hdEMG):
+        sample_ready = False
         self.batch_ready = False
         num_groups = len(hdEMG.data) // 64
 
+        self.raw_emg_array.append(hdEMG.data)
+
+        if len(self.raw_emg_array) > 27:
+            b, a = signal.butter(4, filter_window, btype='bandpass')
+            filtered = np.array(signal.filtfilt(b, a, self.raw_emg_array, axis=0).tolist())
+        else:
+            filtered = np.array(self.raw_emg_array)
+
+        reading = filtered[-1,:]
+
+        if len(self.emg_win) < emg_avg_window:
+            self.emg_win.append(reading)
+        else:
+            self.emg_win.pop(0)
+            self.emg_win.append(reading)
+            sample_ready = True
+        
+        if sample_ready:
+            smoothed_reading = np.mean(self.emg_win, axis=0)
+        else:
+            smoothed_reading = reading
+
         samples = []
         for i in range(num_groups):
-            muscle = list(hdEMG.data[64*i : 64*i + 64])
+            muscle = list(smoothed_reading[64*i : 64*i + 64])
             samples.append(muscle)
         
-
         # torque = hdEMG.data[319]
         # self.torque_array.append(abs(torque))
         # if len(self.torque_array) > 0:
@@ -581,7 +630,7 @@ class calibrate:
         sample = []
         for i in range(n):
             #sample.append(np.sqrt(np.mean([j**2 for j in self.sample[i]])))
-            sample.append(np.sqrt(np.mean([sample**2 for index,sample in enumerate(samples[i]) if index not in noisy_channels[i]])))
+            sample.append(np.sqrt(np.mean([sample**2 for index,sample in enumerate(samples[muscles[i]]) if index not in noisy_channels[i]])))
         self.emg_array.append(sample)
 
         if self.batch_ready:
@@ -603,9 +652,4 @@ if __name__ == '__main__':
         rospy.spin()
 
     except rospy.ROSInterruptException:
-
-        path = rospy.get_param("/file_dir")
-        raw_torque_df = pd.DataFrame(calibration.raw_torque_array)
-        raw_torque_df.to_csv(path + "/src/talker_listener/raw_torque.csv")
-
         pass

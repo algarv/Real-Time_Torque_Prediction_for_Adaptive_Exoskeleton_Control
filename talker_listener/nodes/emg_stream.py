@@ -13,9 +13,9 @@ def main():
     r = rospy.Rate(2048)
     pub = rospy.Publisher('hdEMG_stream', Float64MultiArray, queue_size=1)
     
-    nyquist = .5 * 2048.0
-    filter_window = [20.0/nyquist, 50.0/nyquist]
-    avg_window = 100 #10**5
+    # nyquist = .5 * 2048.0
+    # filter_window = [20.0/nyquist, 50.0/nyquist]
+    # avg_window = 100 #10**5
 
     win = []
 
@@ -37,14 +37,14 @@ def main():
     data = np.array(data)
     print(data.shape)
 
-    b, a = signal.butter(4, filter_window, btype='bandpass')
-    filtered = signal.filtfilt(b, a, data, axis=0).tolist()
+    # b, a = signal.butter(4, filter_window, btype='bandpass')
+    # filtered = signal.filtfilt(b, a, data, axis=0).tolist()
 
     sample_ready = False
     sample_count = 0
     i = 0
     while not rospy.is_shutdown():    
-        reading = filtered[i]
+        reading = data[i] #filtered[i]
         #csv_reader = np.genfromtxt(stream,delimiter=',')
         #reading1 = []
         #reading2 = []
@@ -62,26 +62,26 @@ def main():
 
         #reading = reading1 + reading2 + reading3 + reading4
 
-        if sample_count < avg_window:
-            win.append(reading)
-        else:
-            win.pop(0)
-            win.append(reading)
-            sample_ready = True
+        # if sample_count < avg_window:
+        #     win.append(reading)
+        # else:
+        #     win.pop(0)
+        #     win.append(reading)
+        #     sample_ready = True
         
-        if sample_ready:
-            smoothed_reading = np.mean(win, axis=0)
+        # if sample_ready:
+        #     smoothed_reading = np.mean(win, axis=0)
 
-            sample = Float64MultiArray()
-            sample.data = smoothed_reading
+        sample = Float64MultiArray()
+        sample.data = reading #smoothed_reading
 
-            dim = []
-            dim.append(MultiArrayDimension("rows", 4, 16*4))
-            dim.append(MultiArrayDimension("columns", 1, 1))
+        dim = []
+        dim.append(MultiArrayDimension("rows", 1, 6*64))
+        dim.append(MultiArrayDimension("columns", 1, 1))
 
-            sample.layout.dim = dim
+        sample.layout.dim = dim
 
-            pub.publish(sample)
+        pub.publish(sample)
         
         i += 1 #4
         sample_count += 1

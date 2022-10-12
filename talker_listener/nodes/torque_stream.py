@@ -20,7 +20,7 @@ def main():
     for row in csv_reader:
         data.append(float(row[0]))
     i_max = len(data)
-    print(data)
+
     while not rospy.is_shutdown():
 
         reading[2] = data[i] #random.randint(-3,3) #-2.0
