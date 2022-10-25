@@ -14,7 +14,7 @@ def main():
     i = 0
 
     path = rospy.get_param("/file_dir")
-    stream = open(path + "/src/talker_listener/spliced_together_raw-Ish_torque_data.csv")
+    stream = open(path + "/src/talker_listener/raw_torque_9_edit.csv")
     csv_reader = csv.reader(stream, delimiter=' ')
     data = []
     for row in csv_reader:
@@ -36,6 +36,7 @@ def main():
         #     reading[2] = 0
 
         sample = State()
+        sample.header.stamp = rospy.Time.now()
         sample.joint_torque_sensor = reading
         sample.joint_position = reading
         sample.joint_velocity = reading
@@ -47,9 +48,9 @@ def main():
         # if i > 26:
         #     i = 0
         if i == i_max:
-            break
-        else:
-            r.sleep()
+            i = 0
+
+        r.sleep()
 
 
 if __name__ == '__main__':

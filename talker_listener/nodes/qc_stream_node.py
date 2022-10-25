@@ -9,6 +9,7 @@ import talker_listener.qc_communication as comm
 import pandas as pd
 import scipy as sp
 from std_msgs.msg import String, Float64, Float64MultiArray, MultiArrayDimension
+from talker_listener.msg import hdemg
 from scipy import signal
 
 # set save path
@@ -23,6 +24,7 @@ nyquist = .5 * 2048
 window = [20/nyquist, 50/nyquist]
 b, a = signal.butter(4, window, btype='bandpass')
 num_samples = 0 
+
 
 def startup():
     # number of channels (408 for the quattrocento device)
@@ -125,12 +127,13 @@ def record_print(q_socket, nchan, nbytes):
 if __name__ == '__main__':
     rospy.init_node('QC_stream_node')
     r = rospy.Rate(2048)
-    pub = rospy.Publisher('hdEMG_stream', Float64MultiArray, queue_size=1)
+    pub = rospy.Publisher('hdEMG_stream', hdemg, queue_size=1)
     
     #avg_window = 100 #10**5
 
     q_socket, nchan, nbytes = startup()
 
+    timer = rospy.get_time()
     #win = []
     #sample_count = 0
     #sample_ready = False
@@ -149,6 +152,8 @@ if __name__ == '__main__':
         # if sample_ready:
         #     smoothed_reading = np.mean(win, axis=0)
         
+        stamped_sample = hdemg()
+
         sample = Float64MultiArray()
         sample.data = reading #smoothed_reading
 
@@ -158,7 +163,12 @@ if __name__ == '__main__':
         
         sample.layout.dim = dim        
         
-        pub.publish(sample)
+        stamped_sample.header.stamp = rospy.get_rostime() #rospy.Time.now()
+        stamped_sample.data = sample
+
+        pub.publish(stamped_sample)
+        print("Measured Frequency: ", 1/(rospy.get_time() - timer))
+        timer = rospy.get_time()
         #sample_count += 1
 
         r.sleep()

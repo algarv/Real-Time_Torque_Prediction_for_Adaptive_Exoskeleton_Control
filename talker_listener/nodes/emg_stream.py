@@ -1,5 +1,6 @@
 import rospy
 from std_msgs.msg import Float64MultiArray, MultiArrayDimension
+from talker_listener.msg import hdemg
 from rospy.core import logdebug 
 import csv
 import scipy as sp
@@ -11,7 +12,7 @@ from scipy import signal
 def main():
     rospy.init_node('emg_stream', log_level=rospy.DEBUG)
     r = rospy.Rate(2048)
-    pub = rospy.Publisher('hdEMG_stream', Float64MultiArray, queue_size=1)
+    pub = rospy.Publisher('hdEMG_stream', hdemg, queue_size=10)
     
     # nyquist = .5 * 2048.0
     # filter_window = [20.0/nyquist, 50.0/nyquist]
@@ -21,7 +22,7 @@ def main():
 
     data = []
     path = rospy.get_param("/file_dir")
-    stream = open(path + "/src/talker_listener/raw_emg_4_edited.csv")
+    stream = open(path + "/src/talker_listener/raw_emg_9_edit.csv")
     csv_reader = csv.reader(stream, delimiter=',')
     
     # csv_chunk = pd.read_csv(stream, chunksize=10000)
@@ -44,6 +45,7 @@ def main():
     sample_count = 0
     i = 0
     while not rospy.is_shutdown():    
+    # for i in range(len(data)):
         reading = data[i] #filtered[i]
         #csv_reader = np.genfromtxt(stream,delimiter=',')
         #reading1 = []
@@ -72,6 +74,8 @@ def main():
         # if sample_ready:
         #     smoothed_reading = np.mean(win, axis=0)
 
+        stamped_sample = hdemg()
+
         sample = Float64MultiArray()
         sample.data = reading #smoothed_reading
 
@@ -81,8 +85,13 @@ def main():
 
         sample.layout.dim = dim
 
-        pub.publish(sample)
-        
+        stamped_sample.header.stamp = rospy.get_rostime()
+        stamped_sample.data = sample
+
+        # print("TIME OUT: ", rospy.get_rostime())
+
+        pub.publish(stamped_sample)
+
         i += 1 #4
         sample_count += 1
         if i >= len(data): #len(row) - 4:

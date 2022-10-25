@@ -18,12 +18,15 @@ model = MUdecomposer(model_file)
 
 torque_max = rospy.get_param('Max_Torque', 25.0)
 
+nyquist = .5 * 2048.0
+filter_window = [20.0/nyquist, 50.0/nyquist]
 win = 40
+emg_avg_window = 5
 method = 'emg' 
 adaptive = False #True
-muscles = [0, 1, 2] #MUST BE THE SAME IN BOTH FILES
+muscles = [2, 3, 4] #MUST BE THE SAME IN BOTH FILES
 n = len(muscles)
-
+noisy_channels = [[],[],[61]]
 nyquist = .5 * 2048
 window = [20/nyquist, 50/nyquist]
 
@@ -31,9 +34,11 @@ mass = 2.37 #kg
 g = -9.81 #m/s^2
 l = 0.1524 #m
 
+predictions = []
+
 class QC_node:
     def __init__(self):
-        r = rospy.Rate(2048) #2048 HZ for reading samples, 33 HZ for predictions  #100Hz for torque controller
+        r = rospy.Rate(100) #2048 HZ for reading samples, 33 HZ for predictions  #100Hz for torque controller
         self.dt = 1.0 / 100.0
         self.torque_pub = rospy.Publisher('/h3/right_ankle_effort_controller/command', Float64, queue_size=10)
         emg_sub = rospy.Subscriber('hdEMG_stream', Float64MultiArray, self.get_sample)
@@ -46,6 +51,8 @@ class QC_node:
         self.sample_count = 0
         self.sample = np.zeros((n, win, 64))
         self.emg_array = []
+        self.raw_emg_array = []
+        self.emg_win = []
         self.cst_array = []
         # self.fig, self.axs = plt.subplots()
 
@@ -68,6 +75,7 @@ class QC_node:
                     if method == 'emg':
                         self.torque_cmd = self.calc_torque_emg()
             
+                    predictions.append(self.torque_cmd)
                 # df = pd.DataFrame(self.emg_array)
                 # df.columns = ["Muscle" + str(num) for num in muscles]
                 # df.plot(subplots=True, title="RMS EMG After Bandpass Filter", ax=self.axs)
@@ -76,7 +84,9 @@ class QC_node:
                 #     self.torque_cmd = (self.torque_cmd - self.T_if) #+ (mass * g * l * np.sin(self.theta_next))
 
                 # plt.pause(.01)
-
+                predictions_df = pd.DataFrame(predictions)
+                predictions_df.to_csv(path + "/src/talker_listener/predictions.csv")
+                
                 r.sleep()
 
     def send_torque_cmd(self, event=None):
@@ -93,39 +103,58 @@ class QC_node:
 
     def get_sample(self,hdEMG):
 
-        self.batch_ready = False
+        self.batch_ready = True
         num_groups = len(hdEMG.data) // 64
+
+        self.raw_emg_array.append(hdEMG.data)
+
+        if len(self.raw_emg_array) > 27:
+            b, a = signal.butter(4, filter_window, btype='bandpass')
+            filtered = np.array(signal.filtfilt(b, a, self.raw_emg_array, axis=0).tolist())
+        else:
+            filtered = np.array(self.raw_emg_array)
+
+        reading = filtered[-1,:]
+        
+        if len(self.emg_win) < emg_avg_window:
+            self.emg_win.append(reading)
+        else:
+            self.emg_win.pop(0)
+            self.emg_win.append(reading)
+        
+        smoothed_reading = np.mean(self.emg_win, axis=0)
 
         samples = []
         for i in range(num_groups):
-            muscle = list(hdEMG.data[64*i : 64*i + 64])
+            muscle = list(smoothed_reading[64*i : 64*i + 64])
             samples.append(muscle)
-        
-        i = 0
-        for c in muscles:
-            if self.sample_count < win:
-                self.sample[i][self.sample_count] = samples[c]
-            else: # step size of 20
-                deleted = np.delete(self.sample[i], 0, axis=0)
-                self.sample[i] = np.append(deleted, [np.array(samples[c])],axis=0)
-                # if (self.sample_count % 20) == 0:
-                self.batch_ready = True
-                
-            i += 1
 
         sample = []
         for i in range(n):
-            sample.append(np.sqrt(np.mean([j**2 for j in self.sample[i] if j is not 0])))
+            #sample.append(np.sqrt(np.mean([j**2 for j in self.sample[i]])))
+            sample.append(np.sqrt(np.mean([sample**2 for index,sample in enumerate(samples[muscles[i]]) if index not in noisy_channels[i]])))
         self.emg_array.append(sample)
 
-        if self.batch_ready:
+        # i = 0
+        # for c in muscles:
+        #     if self.sample_count < win:
+        #         self.sample[i][self.sample_count] = samples[c]
+        #     else: # step size of 20
+        #         deleted = np.delete(self.sample[i], 0, axis=0)
+        #         self.sample[i] = np.append(deleted, [np.array(samples[c])],axis=0)
+        #         # if (self.sample_count % 20) == 0:
+        #         self.batch_ready = True
+                
+        #     i += 1
+
+        # if self.batch_ready:
             
-            nueral_drive = model.predict_MUs(self.sample)
-            nueral_drive = nueral_drive.numpy()
-            cst = []
-            for i in range(n):
-                cst.append(np.sum(nueral_drive[:,i]))
-            self.cst_array.append(cst)
+        #     nueral_drive = model.predict_MUs(self.sample)
+        #     nueral_drive = nueral_drive.numpy()
+        #     cst = []
+        #     for i in range(n):
+        #         cst.append(np.sum(nueral_drive[:,i]))
+        #     self.cst_array.append(cst)
                 
         self.sample_count += 1
         
