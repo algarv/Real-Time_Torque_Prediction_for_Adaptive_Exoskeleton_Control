@@ -29,12 +29,12 @@ model = MUdecomposer(model_file)
 nyquist = .5 * 2048.0
 filter_window = [20.0/nyquist, 500.0/nyquist]
 win = 40
-emg_avg_window = 1 #5
+emg_avg_window = 200
 muscles = [2, 3, 4] #MUST BE THE SAME IN BOTH FILES
 n = len(muscles)
 
 #noisy_channels = [[1, 15], [40], [16, 17, 30, 56, 62]]
-noisy_channels = [[],[],[61]] #[[0, 14], [39], [15, 16, 29, 55, 61]]
+noisy_channels = [[],[],[]] #[[0, 14], [39], [15, 16, 29, 55, 61]]
 
 skip = False
 
@@ -50,12 +50,12 @@ class calibrate:
         
         self.timer = rospy.get_time()
 
-        self.torque_sub = rospy.Subscriber('/h3/robot_states', State, self.torque_calib)
+        # self.torque_sub = rospy.Subscriber('/h3/robot_states', State, self.torque_calib)
         self.emg_sub = rospy.Subscriber('hdEMG_stream', hdemg, self.emg_calib)
-        # torque_sub = message_filters.Subscriber('/h3/robot_states', State)#, self.torque_calib)
-        # emg_sub = message_filters.Subscriber('hdEMG_stream', hdemg)#, self.emg_calib)
-        # ts = message_filters.ApproximateTimeSynchronizer([torque_sub, emg_sub], queue_size=1, slop=5)
-        # ts.registerCallback(self.sensor_callback)
+        torque_sub = message_filters.Subscriber('/h3/robot_states', State)#, self.torque_calib)
+        emg_sub = message_filters.Subscriber('hdEMG_stream', hdemg)#, self.emg_calib)
+        ts = message_filters.ApproximateTimeSynchronizer([torque_sub, emg_sub], queue_size=25, slop=.1)
+        ts.registerCallback(self.sensor_callback)
 
         self.pos_pub = rospy.Publisher('/h3/right_ankle_position_controller/command',Float64, queue_size=0)
         self.max_torque = 0
@@ -71,6 +71,7 @@ class calibrate:
         self.cst_array = []
         self.raw_torque_array = []
         self.raw_emg_array = []
+        self.rawest_emg_array = []
         self.sample = np.zeros((n, win, 64))
         self.batch_ready = False
         self.time = []
@@ -552,42 +553,60 @@ class calibrate:
         return self.f(X, betas) #f.to_numpy()[0]
     
     def process_emg(self, iBase, iPF20, iPF0, iPFn20, iDF0, iDF20):
-        print(iBase)
 
         print(len(self.raw_emg_array))
         data = np.array(self.raw_emg_array)
         print(data.shape)
         
+        for i in range(1,5):
+            b, a = signal.iirnotch(123*i,30, 2048)
+            filtered = signal.filtfilt(b,a, data, axis=0).tolist()
+            filtered = np.array(filtered)
+        print(filtered.shape)
+
+        b, a = signal.iirnotch(60,30, 2048)
+        filtered = signal.filtfilt(b,a, data, axis=0).tolist()
+        filtered = np.array(filtered)
+
+        b, a = signal.butter(3, filter_window, btype='bandpass')
+        filtered = signal.filtfilt(b, a, filtered, axis=0).tolist()
+        filtered = np.array(filtered)
+        print(filtered.shape)
+
+        print("Raw Torque Size: ", len(self.raw_torque_array))
         num_samples = len(self.baseline_torque_array) + len(self.PF20_torque_array) + len(self.PF0_torque_array) + len(self.PFn20_torque_array) + len(self.DF0_torque_array) + len(self.DF20_torque_array)
         print("Num samples: ", num_samples)
         resampled = np.zeros((num_samples,data.shape[1]))
         print("Resampling to Shape: ", resampled.shape)
-        for i in range(data.shape[1]):
-            x0 = signal.resample(data[iBase,i], len(self.baseline_torque_array))
-            x1 = signal.resample(data[iPF20,i], len(self.PF20_torque_array))
-            x2 = signal.resample(data[iPF0,i], len(self.PF0_torque_array))
-            x3 = signal.resample(data[iPFn20,i], len(self.PFn20_torque_array))
-            x4 = signal.resample(data[iDF0,i], len(self.DF0_torque_array))
-            x5 = signal.resample(data[iDF20,i], len(self.DF20_torque_array))
+        for i in range(filtered.shape[1]):
+            x0 = signal.resample(filtered[iBase,i], len(self.baseline_torque_array))
+            print("Dif: ", len(filtered[iBase,i])-len(self.baseline_torque_array))
+            x1 = signal.resample(filtered[iPF20,i], len(self.PF20_torque_array))
+            print("Dif: ", len(filtered[iPF20,i])-len(self.PF20_torque_array))
+            x2 = signal.resample(filtered[iPF0,i], len(self.PF0_torque_array))
+            print("Dif: ", len(filtered[iPF0,i])-len(self.PF0_torque_array))
+            x3 = signal.resample(filtered[iPFn20,i], len(self.PFn20_torque_array))
+            print("Dif: ", len(filtered[iPFn20,i])-len(self.PFn20_torque_array))
+            x4 = signal.resample(filtered[iDF0,i], len(self.DF0_torque_array))
+            print("Dif: ", len(filtered[iDF0,i])-len(self.DF0_torque_array))
+            x5 = signal.resample(filtered[iDF20,i], len(self.DF20_torque_array))
+            print("Dif: ", len(filtered[iDF20,i])-len(self.DF20_torque_array))
 
             x = np.concatenate((x0, x1, x2, x3, x4, x5))
-            print(i)
             resampled[:,i] = x
+
+        raw_emg_df_resampled = pd.DataFrame(resampled)
+        raw_emg_df_resampled.to_csv(path + "/src/talker_listener/raw_emg_resampled.csv")
 
         print(resampled.shape)
 
-        b, a = signal.butter(3, filter_window, btype='bandpass')
-        filtered = signal.filtfilt(b, a, resampled, axis=0).tolist()
-        filtered = np.array(filtered)
-        print(filtered.shape)
-
-        num_groups = filtered.shape[1] // 64
+        num_groups = resampled.shape[1] // 64
 
         sample_count = 0
         emg_array = []
         emg_win = []
-        for i in range(filtered.shape[0]):
-            reading = filtered[i,:]
+        for i in range(resampled.shape[0]):
+            reading = resampled[i,:]
 
             if sample_count < emg_avg_window:
                 emg_win.append(reading)
@@ -612,18 +631,18 @@ class calibrate:
 
         emg_array = np.array(emg_array)
 
-        b, a = signal.butter(4, 10/1024, btype='lowpass')
-        filtered = signal.filtfilt(b, a, emg_array, axis=0).tolist()
-        filtered = np.array(filtered)
+        # b, a = signal.butter(4, 10/1024, btype='lowpass')
+        # filtered = signal.filtfilt(b, a, emg_array, axis=0).tolist()
+        # filtered = np.array(filtered)
         print(np.array(filtered).shape)
 
-        return filtered #filtered[iBase,:], filtered[iPF20,:], filtered[iPF0,:], filtered[iPFn20,:], filtered[iDF0,:], filtered[iDF20,:] 
+        return emg_array #filtered #filtered[iBase,:], filtered[iPF20,:], filtered[iPF0,:], filtered[iPFn20,:], filtered[iDF0,:], filtered[iDF20,:] 
 
     def calibration(self):
         self.emg_sub.unregister()
-        self.torque_sub.unregister()
+        # self.torque_sub.unregister()
 
-        print("If you just got a broken pipe error but are seeing this message, all is well")
+        # print("If you just got a broken pipe error but are seeing this message, all is well")
 
         path = rospy.get_param("/file_dir")
         raw_torque_df = pd.DataFrame(self.raw_torque_array)
@@ -632,10 +651,14 @@ class calibrate:
         raw_emg_df = pd.DataFrame(np.array(self.raw_emg_array))
         raw_emg_df.to_csv(path + "/src/talker_listener/raw_emg.csv")
 
+        rawest_emg_df = pd.DataFrame(np.array(self.rawest_emg_array))
+        rawest_emg_df.to_csv(path + "/src/talker_listener/rawest_emg.csv")
+
         #self.baseline_emg_array, self.PF20_emg_array, self.PF0_emg_array, self.PFn20_emg_array, self.DF0_emg_array, self.DF20_emg_array = self.process_emg(range(self.base_start, self.base_end), range(self.PF20_start, self.PF20_end), range(self.PF0_start, self.PF0_end), range(self.PFn20_start, self.PFn20_end), range(self.DF0_start, self.DF0_end), range(self.DF20_start, self.DF20_end))
+        print("Ranges: ", range(self.base_start, self.base_end), range(self.PF20_start, self.PF20_end), range(self.PF0_start, self.PF0_end), range(self.PFn20_start, self.PFn20_end), range(self.DF0_start, self.DF0_end), range(self.DF20_start, self.DF20_end))
         emg_array = self.process_emg(range(self.base_start, self.base_end), range(self.PF20_start, self.PF20_end), range(self.PF0_start, self.PF0_end), range(self.PFn20_start, self.PFn20_end), range(self.DF0_start, self.DF0_end), range(self.DF20_start, self.DF20_end))
 
-        y = np.concatenate((self.baseline_torque_array - min(self.baseline_torque_array), self.PF20_torque_array - min(self.PF20_torque_array), self.PF0_torque_array - min(self.PF0_torque_array), self.PFn20_torque_array - min(self.PFn20_torque_array), self.DF0_torque_array - max(self.DF0_torque_array), self.DF20_torque_array - max(self.DF20_torque_array))) #.reshape(-1,1)
+        y = np.concatenate((self.baseline_torque_array - np.mean(self.baseline_torque_array), self.PF20_torque_array - min(self.PF20_torque_array), self.PF0_torque_array - min(self.PF0_torque_array), self.PFn20_torque_array - min(self.PFn20_torque_array), self.DF0_torque_array - max(self.DF0_torque_array), self.DF20_torque_array - max(self.DF20_torque_array))) #.reshape(-1,1)
         emg_df = pd.DataFrame({'Torque': y})
         cst_df = pd.DataFrame({'Torque': y})
         
@@ -749,69 +772,72 @@ class calibrate:
         # rospy.set_param('cst_coef',cst_coef)
         rospy.set_param('calibrated', True)
 
-    # def sensor_callback(self,sensor_reading,hdEMG):
+    def sensor_callback(self,sensor_reading,hdEMG):
 
-    #     # print("Hello?")
+        # print(self.timer)
+        # print("Measured Frequency: ", 1/(rospy.get_time() - self.timer))
+        # self.timer = rospy.get_time()
 
-    #     print("TIME IN: ", rospy.get_rostime())
+        # print("Hello?")
 
+        # print("TIME IN: ", rospy.get_rostime())
 
-    #     self.raw_torque_array.append(sensor_reading.joint_torque_sensor[2])
+        self.raw_torque_array.append(sensor_reading.joint_torque_sensor[2])
 
-    #     torque = sensor_reading.joint_torque_sensor[2] - self.torque_offset
+        torque = sensor_reading.joint_torque_sensor[2] - self.torque_offset
         
-    #     self.torque_array.append(torque)
-    #     if len(self.torque_array) > 0:
-    #         if (len(self.torque_array) <= torque_window):
-    #             avg = np.mean(self.torque_array)
-    #             self.smoothed_torque_array.append(avg)
-    #         else:
-    #             avg = np.sum(self.torque_array[-1*torque_window:]) / torque_window
-    #             self.smoothed_torque_array.append(avg)
+        self.torque_array.append(torque)
+        if len(self.torque_array) > 0:
+            if (len(self.torque_array) <= torque_window):
+                avg = np.mean(self.torque_array)
+                self.smoothed_torque_array.append(avg)
+            else:
+                avg = np.sum(self.torque_array[-1*torque_window:]) / torque_window
+                self.smoothed_torque_array.append(avg)
         
-    #         self.time.append(rospy.Time.now().to_sec() - self.start_time)
+            self.time.append(rospy.Time.now().to_sec() - self.start_time)
 
-    #         if self.smoothed_torque_array[-1] > self.max_torque:
-    #             rospy.set_param('Max_Torque', torque)    
-    #             self.max_torque = torque
+            if self.smoothed_torque_array[-1] > self.max_torque:
+                rospy.set_param('Max_Torque', torque)    
+                self.max_torque = torque
 
-    #     num_groups = len(hdEMG.data.data) // 64
+        # num_groups = len(hdEMG.data.data) // 64
 
-    #     self.raw_emg_array.append(hdEMG.data.data)
+        self.raw_emg_array.append(hdEMG.data.data)
 
-    #     if len(self.raw_emg_array) > 27:
-    #         b, a = signal.butter(4, filter_window, btype='bandpass')
-    #         filtered = np.array(signal.filtfilt(b, a, self.raw_emg_array, axis=0).tolist())
-    #     else:
-    #         filtered = np.array(self.raw_emg_array)
+        # if len(self.raw_emg_array) > 27:
+        #     b, a = signal.butter(4, filter_window, btype='bandpass')
+        #     filtered = np.array(signal.filtfilt(b, a, self.raw_emg_array, axis=0).tolist())
+        # else:
+        #     filtered = np.array(self.raw_emg_array)
 
-    #     reading = filtered[-1,:]
+        # reading = filtered[-1,:]
 
-    #     if len(self.emg_win) < emg_avg_window:
-    #         self.emg_win.append(reading)
-    #     else:
-    #         self.emg_win.pop(0)
-    #         self.emg_win.append(reading)
+        # if len(self.emg_win) < emg_avg_window:
+        #     self.emg_win.append(reading)
+        # else:
+        #     self.emg_win.pop(0)
+        #     self.emg_win.append(reading)
         
-    #     smoothed_reading = np.mean(self.emg_win, axis=0)
+        # smoothed_reading = np.mean(self.emg_win, axis=0)
 
-    #     b, a = signal.butter(3, 10/1024, btype='lowpass')
-    #     filtered = signal.filtfilt(b, a, smoothed_reading, axis=0).tolist()
-    #     filtered = np.array(filtered)
-    #     smoothed_reading = filtered
+        # b, a = signal.butter(3, 10/1024, btype='lowpass')
+        # filtered = signal.filtfilt(b, a, smoothed_reading, axis=0).tolist()
+        # filtered = np.array(filtered)
+        # smoothed_reading = filtered
 
-    #     samples = []
-    #     for i in range(num_groups):
-    #         muscle = list(smoothed_reading[64*i : 64*i + 64])
-    #         samples.append(muscle)
+        # samples = []
+        # for i in range(num_groups):
+        #     muscle = list(smoothed_reading[64*i : 64*i + 64])
+        #     samples.append(muscle)
 
-    #     sample = []
-    #     for i in range(n):
-    #         #sample.append(np.sqrt(np.mean([j**2 for j in self.sample[i]])))
-    #         sample.append(np.sqrt(np.mean([sample**2 for index,sample in enumerate(samples[muscles[i]]) if index not in noisy_channels[i]])))
-    #     self.emg_array.append(sample)
+        # sample = []
+        # for i in range(n):
+        #     #sample.append(np.sqrt(np.mean([j**2 for j in self.sample[i]])))
+        #     sample.append(np.sqrt(np.mean([sample**2 for index,sample in enumerate(samples[muscles[i]]) if index not in noisy_channels[i]])))
+        # self.emg_array.append(sample)
 
-    #     self.sample_count += 1
+        # self.sample_count += 1
 
 
     def torque_calib(self,sensor_reading):
@@ -835,7 +861,6 @@ class calibrate:
 
 
     def emg_calib(self,hdEMG):
-
         # print(self.timer)
         # print("Measured Frequency: ", 1/(rospy.get_time() - self.timer))
         # self.timer = rospy.get_time()
@@ -843,7 +868,7 @@ class calibrate:
         # self.batch_ready = False
         # num_groups = len(hdEMG.data.data) // 64
 
-        self.raw_emg_array.append(hdEMG.data.data)
+        self.rawest_emg_array.append(hdEMG.data.data)
         # print(len(self.raw_emg_array))
 
         # if len(self.raw_emg_array) > 27:

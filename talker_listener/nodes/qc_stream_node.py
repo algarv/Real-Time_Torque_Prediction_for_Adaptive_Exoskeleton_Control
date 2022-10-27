@@ -167,8 +167,8 @@ if __name__ == '__main__':
         stamped_sample.data = sample
 
         pub.publish(stamped_sample)
-        print("Measured Frequency: ", 1/(rospy.get_time() - timer))
-        timer = rospy.get_time()
+        # print("Measured Frequency: ", 1/(rospy.get_time() - timer))
+        # timer = rospy.get_time()
         #sample_count += 1
 
         r.sleep()
