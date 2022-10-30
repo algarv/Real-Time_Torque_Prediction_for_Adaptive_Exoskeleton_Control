@@ -3,6 +3,7 @@ import random
 from h3_msgs.msg import State
 from rospy.core import logdebug 
 import csv
+import pandas as pd
 
 def main():
     rospy.init_node('torque_stream', log_level=rospy.DEBUG)
@@ -14,11 +15,14 @@ def main():
     i = 0
 
     path = rospy.get_param("/file_dir")
-    stream = open(path + "/src/talker_listener/raw_torque_9_edit.csv")
-    csv_reader = csv.reader(stream, delimiter=' ')
-    data = []
-    for row in csv_reader:
-        data.append(float(row[0]))
+    df = pd.read_csv(path+"/src/talker_listener/raw_torque_13.csv")
+    df = df.iloc[:,1:].dropna()
+    data = df.to_numpy()
+    # stream = open(path + "/src/talker_listener/raw_torque_13.csv")
+    # csv_reader = csv.reader(stream, delimiter=' ')
+    # data = []
+    # for row in csv_reader:
+    #     data.append(float(row[0]))
     i_max = len(data)
 
     while not rospy.is_shutdown():

@@ -22,7 +22,10 @@ timestamp = []
 
 nyquist = .5 * 2048
 window = [20/nyquist, 50/nyquist]
-b, a = signal.butter(4, window, btype='bandpass')
+filtering_window = 2000
+# b, a = signal.butter(4, window, btype='bandpass')
+high_b, high_a = signal.butter(4, 20/nyquist, btype='highpass')
+
 num_samples = 0 
 
 
@@ -134,28 +137,32 @@ if __name__ == '__main__':
     q_socket, nchan, nbytes = startup()
 
     timer = rospy.get_time()
-    #win = []
-    #sample_count = 0
-    #sample_ready = False
+    win = []
+    sample_count = 0
+    # sample_ready = False
     #raw_emg_array = []
     while not rospy.is_shutdown():
 
         reading = record_print(q_socket, nchan, nbytes)
+        stamped_sample = hdemg()
+        stamped_sample.header.stamp = rospy.get_rostime() #rospy.Time.now()
 
-        # if sample_count < avg_window:
-        #     win.append(reading)
-        # else:
-        #     win.pop(0)
-        #     win.append(reading)
-        #     sample_ready = True
+        if sample_count < filtering_window:
+            win.append(reading)
+        else:
+            win.pop(0)
+            win.append(reading)
+            # sample_ready = True
         
         # if sample_ready:
         #     smoothed_reading = np.mean(win, axis=0)
         
-        stamped_sample = hdemg()
+        filtered = signal.filtfilt(high_b, high_a, win, axis=0).tolist()
+        filtered = np.array(filtered)
+
 
         sample = Float64MultiArray()
-        sample.data = reading #smoothed_reading
+        sample.data = filtered #reading #smoothed_reading
 
         dim = []
         dim.append(MultiArrayDimension("rows", 1, 6*64))
@@ -163,12 +170,11 @@ if __name__ == '__main__':
         
         sample.layout.dim = dim        
         
-        stamped_sample.header.stamp = rospy.get_rostime() #rospy.Time.now()
         stamped_sample.data = sample
 
         pub.publish(stamped_sample)
         # print("Measured Frequency: ", 1/(rospy.get_time() - timer))
         # timer = rospy.get_time()
-        #sample_count += 1
+        sample_count += 1
 
         r.sleep()
