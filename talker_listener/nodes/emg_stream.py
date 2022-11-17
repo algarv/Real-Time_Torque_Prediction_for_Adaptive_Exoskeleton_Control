@@ -12,11 +12,11 @@ from scipy import signal
 
 def main():
     rospy.init_node('emg_stream', log_level=rospy.DEBUG)
-    r = rospy.Rate(2048)
+    r = rospy.Rate(512)
     pub = rospy.Publisher('hdEMG_stream', hdemg, queue_size=10)
     
-    nyquist = .5 * 2048.0
-    # filter_window = [20.0/nyquist, 50.0/nyquist]
+    nyquist = .5 * 512.0 #2048.0
+    filter_window = [20.0/nyquist, 500.0/nyquist]
     # avg_window = 100 #10**5
 
     filtering_window = 100
@@ -43,6 +43,8 @@ def main():
     #     if len(temp_list) > 0:
     #         data.append(np.array(temp_list))
     
+    # timer = rospy.get_time()
+
     data = df.to_numpy()
     print(data.shape)
 
@@ -53,6 +55,9 @@ def main():
     sample_count = 0
     i = 0
     while not rospy.is_shutdown():    
+        # print("Measured Frequency: ", 1/(rospy.get_time() - timer))
+        # timer = rospy.get_time()
+
     # for i in range(len(data)):
         stamped_sample = hdemg()
         stamped_sample.header.stamp = rospy.get_rostime()
@@ -60,41 +65,58 @@ def main():
         reading = data[i] #filtered[i]
         sample_count += 1
         i += 1
+                    
+        if i >= len(data): #len(row) - 4:
+            i = 0
 
         if sample_count <= filtering_window:
             win.append(reading)
+
+            if sample_count % 20 == 0:
+                sample = Float64MultiArray()
+                sample.data = np.mean(win, axis=0) # reading
+
+                dim = []
+                dim.append(MultiArrayDimension("rows", 1, 6*64))
+                dim.append(MultiArrayDimension("columns", 1, 1))
+
+                sample.layout.dim = dim
+
+                stamped_sample.data = sample
+
+                pub.publish(stamped_sample)
+
             r.sleep()
         else:
             win.pop(0)
             win.append(reading)
 
-            filtered=win.copy()
-            for j in range(1,5):
-                b, a = signal.iirnotch(123*j,30, 2048)
-                filtered = signal.filtfilt(b,a, filtered, axis=0).tolist()
-                filtered = np.array(filtered)
+            if sample_count % 20 == 0:
+                filtered=win.copy()
+                # for j in range(1,5):
+                #     b, a = signal.iirnotch(123*j,30, 2048)
+                #     filtered = signal.filtfilt(b,a, filtered, axis=0).tolist()
+                #     filtered = np.array(filtered)
 
-            b, a = signal.iirnotch(60,30, 2048)
-            filtered = signal.filtfilt(b,a, filtered, axis=0).tolist()
+                # b, a = signal.iirnotch(60,30, 2048)
+                # filtered = signal.filtfilt(b,a, filtered, axis=0).tolist()
 
-            filtered = signal.filtfilt(high_b, high_a, filtered, axis=0).tolist()
-            
-            sample = Float64MultiArray()
-            sample.data = filtered[-1] #smoothed_reading
+                filtered = signal.filtfilt(high_b, high_a, filtered, axis=0).tolist()
+                
+                sample = Float64MultiArray()
+                sample.data = np.mean(filtered[-20:], axis=0) #filtered[-1] #smoothed_reading
 
-            dim = []
-            dim.append(MultiArrayDimension("rows", 1, 6*64))
-            dim.append(MultiArrayDimension("columns", 1, 1))
+                dim = []
+                dim.append(MultiArrayDimension("rows", 1, 6*64))
+                dim.append(MultiArrayDimension("columns", 1, 1))
 
-            sample.layout.dim = dim
+                sample.layout.dim = dim
 
-            stamped_sample.data = sample
+                stamped_sample.data = sample
 
-            pub.publish(stamped_sample)
-            
-            if i >= len(data): #len(row) - 4:
-                i = 0
-            r.sleep()
+                pub.publish(stamped_sample)
+
+                r.sleep()
 
 
 if __name__ == '__main__':

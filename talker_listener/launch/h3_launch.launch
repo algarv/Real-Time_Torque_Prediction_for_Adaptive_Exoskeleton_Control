@@ -14,6 +14,6 @@
     </group>
 
     <node name="calibration" pkg="talker_listener" type="calibrate.py" output="screen"/>
-    <!-- <node name="QC_node" pkg="talker_listener" type="QC_node3.py" output="screen"/> -->
+    <node name="QC_node" pkg="talker_listener" type="QC_node3.py" output="screen"/>
 
 </launch>

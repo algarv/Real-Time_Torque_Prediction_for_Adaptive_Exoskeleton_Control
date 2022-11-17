@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+'''
+Calibration Node
+
+This node subscribes to the torque measurements from the exoskeleton and the high-density EMG data from the intermediate streaming node, collects and
+organizes the information through 6 phases, and finally fits a model with the processed data. 
+
+Subscribers:
+    Name: /h3/robot_states Type: h3_msgs/State         Published Rate: 100 Hz 
+    
+    Name: /hdEMG_stream    Type: talker_listener/hdemg Published Rate: 2048 Hz 
+
+Publishers:
+    Name: /h3/right_ankle_position_controller/command Type: Float64
+'''
 
 from cv2 import log
 import rospy
@@ -16,58 +30,74 @@ import matplotlib.pyplot as plt
 from rospy.core import logdebug
 from h3_msgs.msg import State
 import message_filters
+from sklearn.gaussian_process import GaussianProcessRegressor
+import joblib
 
-trial_length = 26 #seconds
+# Parameters for trapezoid torque trajectories #
+trial_length = 25 #26 #seconds
 rest_time = 15 #seconds
-torque_window = 10 #10**7 #samples (100 Hz * 100 ms Window)
 
+# Neural Net Set-Up #
 path = rospy.get_param("/file_dir")
-#model_file = path + "\\src\\talker_listener\\best_model_cnn-allrun5_c8b_mix4-SG0-ST20-WS40-MU[0, 1, 2, 3]_1644222946_f.h5"
 model_file = path + "/src/talker_listener/" + "best_model_cnn-allrun5_c8b_mix4-SG0-ST20-WS40-MU[0, 1, 2, 3]_1644222946_f.h5"
 model = MUdecomposer(model_file)
 
+# Filter parameters #
 nyquist = .5 * 2048.0
 filter_window = [20.0/nyquist, 500.0/nyquist]
+
 win = 40
-emg_window = 25
-muscles = [2, 3, 4] #MUST BE THE SAME IN BOTH FILES
+emg_window = 300 #samples
+torque_window = 50 #samples
+
+# Parameters to Organize Raw EMG Data #
+muscles = [2, 3, 4] # Channels of the inputs on the Quattrocento #MUST BE THE SAME IN BOTH FILES
 n = len(muscles)
+noisy_channels = [[],[],[]]
 
-#noisy_channels = [[1, 15], [40], [16, 17, 30, 56, 62]]
-noisy_channels = [[],[],[]] #[[0, 14], [39], [15, 16, 29, 55, 61]]
-
+# Option to skip the calibration procedure for testing purposes
 skip = False
 
 class calibrate:
     def __init__(self):
 
+        # Configure plots for torque trajectories
         self.fig, self.axs = plt.subplots()
         self.start_time = rospy.Time.now().to_sec()
         self.sample_count = 0
 
+        # Set rate to the maximum of the sensor publishers
         self.r = rospy.Rate(2048)
         
+        # Initialize a timer that will be used to track the subscriber rates
         self.timer = rospy.get_time()
 
-        # self.torque_sub = rospy.Subscriber('/h3/robot_states', State, self.torque_calib)
-        # self.emg_sub = rospy.Subscriber('hdEMG_stream', hdemg, self.emg_calib)
-        torque_sub = message_filters.Subscriber('/h3/robot_states', State)#, self.torque_calib)
-        emg_sub = message_filters.Subscriber('hdEMG_stream', hdemg)#, self.emg_calib)
-        ts = message_filters.ApproximateTimeSynchronizer([torque_sub, emg_sub], queue_size=25, slop=.1)
-        ts.registerCallback(self.sensor_callback)
+        # Subscribers for the torque and hd-EMG publishers
+        self.torque_sub = rospy.Subscriber('/h3/robot_states', State, self.torque_calib)
+        self.emg_sub = rospy.Subscriber('hdEMG_stream', hdemg, self.emg_calib)
+        # torque_sub = message_filters.Subscriber('/h3/robot_states', State)#, self.torque_calib)
+        # emg_sub = message_filters.Subscriber('hdEMG_stream', hdemg)#, self.emg_calib)
+        # ts = message_filters.ApproximateTimeSynchronizer([torque_sub, emg_sub], queue_size=25, slop=0.01)
+        # ts.registerCallback(self.sensor_callback)
 
+        # Publisher for position control 
         self.pos_pub = rospy.Publisher('/h3/right_ankle_position_controller/command',Float64, queue_size=0)
+
+        # Initialize empty lists to collect data
         self.max_torque = 0
         self.torque_offset = 0
         self.torque_array = []
         self.smoothed_torque_array = []
+        self.torque_array_for_plot = []
         self.torque_avg = 0
+        self.offset = 0
         self.PF0_array = []
         self.PF10_array = []
         self.DF0_array = []
         self.DF10_array = []
         self.emg_array = []
         self.emg_win = []
+        self.emg_win2 = []
         self.emg_avg = [0 for i in range(n)]
         self.cst_array = []
         self.raw_torque_array = []
@@ -77,19 +107,21 @@ class calibrate:
         self.batch_ready = False
         self.time = []
 
+        # Option to skip and automatically fill in coefficients for more efficient testing
         if skip:
             rospy.wait_for_message('/h3/robot_states', State,timeout=None)
             rospy.wait_for_message('hdEMG_stream',hdemg,timeout=None)
-            rospy.set_param('emg_coef', [1.6553566115671112, -3.3150770132099012, 1.6553566115671123, -0.3251285848589391, -0.02815857136421618, 0.01869688004015378, 0.01869688004015207, 1.6716279865773398]) #[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0])
+            rospy.set_param('emg_coef', [-0.05924206632548324, 0.07308002852834987, -0.010205697520960628, 0.014988316415483847, 0.19686142439328932, -0.472474122679755, -0.03572108260612725, 0.06991187788416942, -0.31417410726300765, 0.5325433423014446, 0.021067465788979348, -0.03927366176608191, 0.3077862163158001, -0.6202070457882917, 2.627966320043538]) #[1.6553566115671112, -3.3150770132099012, 1.6553566115671123, -0.3251285848589391, -0.02815857136421618, 0.01869688004015378, 0.01869688004015207, 1.6716279865773398]) #[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0])
             rospy.set_param('cst_coef', [0.613430299271461, 0.9098084781400041, 0.409857422818683, -0.20047670400913495, 0.08541811441013507, -4.42430850813377])#[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0])
             rospy.set_param('calibrated', True)
         else:
-            # rospy.wait_for_message('/h3/robot_states',State,timeout=None)
+        # Wait for the first messages from the EMG stream, then start the first trial
             rospy.wait_for_message('hdEMG_stream',hdemg,timeout=None)
             rospy.loginfo("Starting Baseline")
             self.baseline()
     
     def max(self):
+        ''' Record the maximum voluntary contraction (MVC) over a 5 second period'''
 
         start_index = len(self.torque_array)
         start = rospy.Time.now()
@@ -101,6 +133,8 @@ class calibrate:
         return MVC
 
     def get_max(self):
+        ''' Return the measured MVC as the average of 2 trials'''
+
         rospy.loginfo("Go!")
         max1 = self.max()
         rospy.loginfo("MVC 1: ")
@@ -117,55 +151,42 @@ class calibrate:
         return float((max1 + max2)/2)
 
     def make_traj_trap(self, min, max, len):
-        # desired_traj = [0, 0, 0]
-        # step =  .20 * (max-min) / 5
-        # prev = 0
-        # for i in range(5):
-        #     desired_traj.append(prev)
-        #     prev += step
-        # for i in range(10):
-        #     desired_traj.append(.20 * self.max_PF0)
-        # prev = desired_traj[-1]
-        # for i in range(5):
-        #     desired_traj.append(prev)
-        #     prev -= step
+        ''' Create a trapezoidal trajectory based on the MVC measurement '''
 
-        # desired_traj.append(0)
-        # desired_traj.append(0)
-        # desired_traj.append(0)
         step = int(len/5)
-        max = .2 * max
-        min = 0 #np.mean(self.baseline_torque_array)
-        print("Min Torque: ", self.torque_offset)
-        # max += 2.0
-        # min = 2.0
+        max = .2 * (max - min)
         desired_traj = []
-        for i in range(0, step):
-            desired_traj.append(min)
-        for i in range(step, 2*step):
-            y = i * ((max - min) / step) + 2*min - max
+        for i in range(0, int(.5*step)):
+            desired_traj.append(0)
+        for i in range(int(.5*step), 2*step):
+            y = (i*(max - 0) / (step + int(.5*step))) - max/3 #2*min - max
             desired_traj.append(y)
         for i in range(2*step, 3*step):
             desired_traj.append(max)
-        for i in range(3*step, 4*step):
-            y = -1*i*((max-min)/step) + 4*max - 3*min
+        for i in range(3*step, int(4.5*step)):
+            y = ((-i*max - 0)/(step + int(.5*step))) + 3*max #- 3*min
             desired_traj.append(y)
-        for i in range(4*step, 5*step):
-            desired_traj.append(min)
+        for i in range(int(4.5*step), 5*step):
+            desired_traj.append(0)
 
         return desired_traj
 
     def baseline(self):
+        ''' Baseline Trial: Measure torque at rest with a joint angle of 0 '''
+
+        self.sample_count = 0
+        self.emg_win = []
+
         rospy.loginfo("Collecting baseline")
         self.pos_pub.publish(float(0.0))
 
+        # Reset timer and data arrays 
         start = rospy.Time.now()
         self.torque_array = []
         self.smoothed_torque_array = []
-        self.sample_count = 0
         self.emg_array = []
         self.smoothed_emg_array = []
-        self.emg_win = []
+        self.emg_win2 = []
         self.base_start = len(self.raw_emg_array)
         self.cst_array = []
         self.start_time = start.to_sec()
@@ -179,103 +200,123 @@ class calibrate:
 
         rospy.sleep(3)
 
+        # Save data arrays
         self.base_end = len(self.raw_emg_array)
         self.baseline_torque_array = self.smoothed_torque_array.copy()
         self.baseline_emg_array = np.array(self.emg_array.copy())
         self.baseline_cst_array = np.array(self.cst_array.copy())
         
-        rospy.loginfo("Starting PF20")
+        rospy.loginfo("Starting PF0")
         self.PF0()
+        # self.calibration()
 
     def PF0(self):
+        ''' PF0 Trial: Plantar flexion, 0 degrees '''
+
+        self.sample_count = 0
+        self.emg_win = []
+
+        # Move to 0 degrees
         rospy.loginfo("Moving to 0")
         self.pos_pub.publish(float(0.0))
         rospy.sleep(5)
 
-        rospy.loginfo("Apply Max PF Torque")
+        # Reset data arrays
+        self.torque_array = []
+        self.smoothed_torque_array = []
+        self.emg_array = []
+        self.smoothed_emg_array = []
+        self.emg_win2 = []
+        self.PF0_start = len(self.raw_emg_array)
+        self.cst_array = []
+        # self.time = []
+        duration = rospy.Duration.from_sec(trial_length)
+        i = 0
         
+        # Measure baseline torque at rest
+        print("Collecting baseline")
+        rospy.sleep(5)
+        self.offset = np.median(self.smoothed_torque_array)
+        self.min_PF0 = min(self.smoothed_torque_array)
+        print(self.offset)
+
+        # Measure MVC
+        rospy.loginfo("Apply Max PF Torque")
         self.max_PF0 = self.get_max()
         rospy.set_param('max_PF0', self.max_PF0)
 
+        # Pause to return to resting rate
         print("Rest")
         rospy.sleep(5)
 
-        desired_traj = self.make_traj_trap(0,self.max_PF0,25)
-
-        self.axs.plot(desired_traj, color='blue')
-        self.axs.set_xlim(0, 25)
-        self.axs.set_ylim(0, 1.25*self.max_PF0)
-
-        self.torque_array = []
-        self.smoothed_torque_array = []
-        self.sample_count = 0
+        # self.sample_count = 0
+        # self.emg_win = []
+        self.emg_win2 = []
         self.emg_array = []
-        self.smoothed_emg_array = []
-        self.emg_win = []
-        self.PF0_start = len(self.raw_emg_array)
-        self.cst_array = []
-        duration = rospy.Duration.from_sec(trial_length)
-        i = 0
+        self.smoothed_torque_array = []
+        self.torque_array_for_plot = []
 
-        print("Collecting baseline")
-        rospy.sleep(5)
+        # Create a 20% Effort trapezoid trajectory
+        desired_traj = self.make_traj_trap(self.min_PF0,self.max_PF0,trial_length)
 
-        start_index = len(self.smoothed_torque_array)
+        # Start real-time plot
+        self.axs.plot(desired_traj, color='blue')
+        self.axs.set_xlim(0, trial_length)
+        self.axs.set_ylim(-0.50*self.max_PF0, 0.50*self.max_PF0)
+
+        # Record indexing variables for plotting 
+        start_index = len(self.torque_array_for_plot)
         start = rospy.Time.now()
         self.start_time = start.to_sec()
         self.time = []
         
-        self.min_PF0 = min(self.torque_array)
-        self.torque_offset = self.min_PF0
-
+        # Start data collection
+        i = 0
         while (rospy.Time.now() < (start + duration)):
-            i += 1
+            
             try:
-                self.axs.plot(self.time, np.abs(self.smoothed_torque_array[start_index:]), color='red')
+                self.axs.plot(self.time, self.torque_array_for_plot[start_index:], color='red')
             except:
+                print("Except")
                 pass
             plt.pause(.01)
+            i += 1
             self.r.sleep()
 
         rospy.sleep(3)
 
+        # Save data arrays
         self.PF0_end = len(self.raw_emg_array)
         self.PF0_torque_array = self.smoothed_torque_array.copy()
         self.PF0_emg_array = np.array(self.emg_array.copy())
         self.PF0_cst_array = np.array(self.cst_array.copy())
         
+        # Start the next trial
         rospy.loginfo("REST")
         rospy.sleep(rest_time)
         plt.close()
-        rospy.loginfo("Starting PF20")
+        rospy.loginfo("Starting PF10")
+                
         self.PF20()
+        # self.calibration()
 
     def PF20(self):
         self.fig, self.axs = plt.subplots()
+
+        self.sample_count = 0
+        self.emg_win = []
 
         rospy.loginfo("Moving to 10 degrees")
         self.pos_pub.publish(0.17)
         rospy.sleep(5)
 
-        self.max_PF20 = self.get_max()
-        rospy.set_param('max_PF20', self.max_PF20)
-
-        print("Rest")
-        rospy.sleep(5)
-
-        desired_traj = self.make_traj_trap(0,self.max_PF20,25)
-        self.axs.plot(desired_traj, color='blue')
-        self.axs.set_xlim(0, 26)
-        self.axs.set_ylim(0, 1.25*self.max_PF20)
-
         #self.calib_index = len(self.torque_array)
         start = rospy.Time.now()
         self.torque_array = []
         self.smoothed_torque_array = []
-        self.sample_count = 0
         self.emg_array = []
         self.smoothed_emg_array = []
-        self.emg_win = []
+        self.emg_win2 = []
         self.PF20_start = len(self.raw_emg_array)
         self.cst_array = []
         self.start_time = start.to_sec()
@@ -283,18 +324,36 @@ class calibrate:
 
         print("Collecting baseline")
         rospy.sleep(5)
+        self.offset = np.median(self.smoothed_torque_array)
+        self.min_PF20 = min(self.torque_array)
+        print(self.offset)
 
-        start_index = len(self.smoothed_torque_array)
+        self.max_PF20 = self.get_max()
+        rospy.set_param('max_PF20', self.max_PF20)
+
+        print("Rest")
+        rospy.sleep(5)
+
+        # self.sample_count = 0
+        # self.emg_win = []
+        self.emg_win2 = []
+        self.emg_array = []
+        self.smoothed_torque_array = []
+        self.torque_array_for_plot = []
+
+        desired_traj = self.make_traj_trap(self.min_PF20,self.max_PF20,trial_length)
+        self.axs.plot(desired_traj, color='blue')
+        self.axs.set_xlim(0, trial_length)
+        self.axs.set_ylim(-0.50*self.max_PF20, 0.50*self.max_PF20)
+
+        start_index = len(self.torque_array_for_plot)
         start = rospy.Time.now()
         self.start_time = start.to_sec()
         self.time = []
 
-        self.min_PF20 = min(self.torque_array)
-        self.torque_offset = self.min_PF20
-
         while (rospy.Time.now() < start + duration):
             try:
-                self.axs.plot(self.time, np.abs(self.smoothed_torque_array[start_index:]), color='red')
+                self.axs.plot(self.time, self.torque_array_for_plot[start_index:], color='red')
             except:
                 pass
             plt.pause(.01)
@@ -316,29 +375,20 @@ class calibrate:
     def PFn20(self):
         self.fig, self.axs = plt.subplots()
 
+        self.sample_count = 0
+        self.emg_win = []
+
         rospy.loginfo("Moving to -10 degrees")
         self.pos_pub.publish(-0.17)
         rospy.sleep(5)
-
-        self.max_PFn20 = self.get_max()
-        rospy.set_param('max_PF20', self.max_PFn20)
-
-        print("Rest")
-        rospy.sleep(5)
-
-        desired_traj = self.make_traj_trap(0,self.max_PFn20,25)
-        self.axs.plot(desired_traj, color='blue')
-        self.axs.set_xlim(0, 26)
-        self.axs.set_ylim(0, 1.25*self.max_PFn20)
 
         #self.calib_index = len(self.torque_array)
         start = rospy.Time.now()
         self.torque_array = []
         self.smoothed_torque_array = []
-        self.sample_count = 0
         self.emg_array = []
         self.smoothed_emg_array = []
-        self.emg_win = []
+        self.emg_win2 = []
         self.PFn20_start = len(self.raw_emg_array)
         self.cst_array = []
         self.start_time = start.to_sec()
@@ -347,18 +397,36 @@ class calibrate:
 
         print("Collecting baseline")
         rospy.sleep(5)
+        self.offset = np.median(self.smoothed_torque_array)
+        self.min_PFn20 = min(self.torque_array)
+        print(self.offset)
 
-        start_index = len(self.smoothed_torque_array)
+        self.max_PFn20 = self.get_max()
+        rospy.set_param('max_PF20', self.max_PFn20)
+
+        print("Rest")
+        rospy.sleep(5)
+
+        # self.sample_count = 0
+        # self.emg_win = []
+        self.emg_win2 = []
+        self.emg_array = []
+        self.smoothed_torque_array = []
+        self.torque_array_for_plot = []
+
+        desired_traj = self.make_traj_trap(self.torque_offset,self.max_PFn20,trial_length)
+        self.axs.plot(desired_traj, color='blue')
+        self.axs.set_xlim(0, trial_length)
+        self.axs.set_ylim(-0.50*self.max_PFn20, 0.50*self.max_PFn20)
+
+        start_index = len(self.torque_array_for_plot)
         start = rospy.Time.now()
         self.start_time = start.to_sec()
         self.time = []
 
-        self.min_PFn20 = min(self.torque_array)
-        self.torque_offset = self.min_PFn20
-
         while (rospy.Time.now() < start + duration):
             try:
-                self.axs.plot(self.time, np.abs(self.smoothed_torque_array[start_index:]), color='red')
+                self.axs.plot(self.time, self.torque_array_for_plot[start_index:], color='red')
             except:
                 pass
             plt.pause(.01)
@@ -380,28 +448,19 @@ class calibrate:
     def DF0(self):
         self.fig, self.axs = plt.subplots()
 
+        self.sample_count = 0
+        self.emg_win = []
+
         rospy.loginfo("Moving to 0 degrees")
         self.pos_pub.publish(0.0)
         rospy.sleep(5)
 
-        self.max_DF0 = self.get_max()
-        rospy.set_param('max_DF0', self.max_DF0)
-
-        print("Rest")
-        rospy.sleep(5)
-
-        desired_traj = self.make_traj_trap(0,self.max_PF20,25)
-        self.axs.plot(desired_traj, color='blue')
-        self.axs.set_xlim(0, 26)
-        self.axs.set_ylim(0, 1.25*self.max_PF0)
-
         start = rospy.Time.now()
         self.torque_array = []
         self.smoothed_torque_array = []
-        self.sample_count = 0
         self.emg_array = []
         self.smoothed_emg_array = []
-        self.emg_win = []
+        self.emg_win2 = []
         self.DF0_start = len(self.raw_emg_array)
         self.cst_array = []
         self.start_time = start.to_sec()
@@ -410,17 +469,35 @@ class calibrate:
         print("Collecting baseline")
         rospy.sleep(5)
         
-        start_index = len(self.smoothed_torque_array)
+        self.offset = np.median(self.smoothed_torque_array)
+        self.min_DFn0 = min(self.torque_array)
+
+        self.max_DF0 = self.get_max()
+        rospy.set_param('max_DF0', self.max_DF0)
+
+        print("Rest")
+        rospy.sleep(5)
+
+        # self.sample_count = 0
+        # self.emg_win = []
+        self.emg_win2 = []
+        self.emg_array = []
+        self.smoothed_torque_array = []
+        self.torque_array_for_plot = []
+
+        desired_traj = self.make_traj_trap(self.torque_offset,self.max_DF0,trial_length)
+        self.axs.plot([-1*num for num in desired_traj], color='blue')
+        self.axs.set_xlim(0, trial_length)
+        self.axs.set_ylim(-0.50*self.max_PFn20,0.50*self.max_PFn20)
+
+        start_index = len(self.torque_array_for_plot)
         start = rospy.Time.now()
         self.start_time = start.to_sec()
         self.time = []
 
-        self.min_DFn0 = min(self.torque_array)
-        self.torque_offset = self.min_DFn0
-
         while (rospy.Time.now() < start + duration):
             try:
-                self.axs.plot(self.time, np.abs(self.smoothed_torque_array[start_index:]), color='red')
+                self.axs.plot(self.time, self.torque_array_for_plot[start_index:], color='red')
             except:
                 pass
             plt.pause(.01)
@@ -442,28 +519,19 @@ class calibrate:
     def DF20(self):
         self.fig, self.axs = plt.subplots()
 
+        self.sample_count = 0
+        self.emg_win = []
+
         rospy.loginfo("Moving to 20 degrees")
         self.pos_pub.publish(-0.17)
         rospy.sleep(5)
 
-        self.max_DF20 = self.get_max()
-        rospy.set_param('max_DF20', self.max_DF20)
-
-        print("Rest")
-        rospy.sleep(5)
-
-        desired_traj = self.make_traj_trap(0,self.max_DF20,25)
-        self.axs.plot(desired_traj, color='blue')
-        self.axs.set_xlim(0, 26)
-        self.axs.set_ylim(0, 1.25*self.max_PF0)
-
         start = rospy.Time.now()
         self.torque_array = []
         self.smoothed_torque_array = []
-        self.sample_count = 0
         self.emg_array = []
         self.smoothed_emg_array = []
-        self.emg_win = []
+        self.emg_win2 = []
         self.DF20_start = len(self.raw_emg_array)
         self.cst_array = []
         self.start_time = start.to_sec()
@@ -472,17 +540,35 @@ class calibrate:
         print("Collecting baseline")
         rospy.sleep(5)
 
-        start_index = len(self.smoothed_torque_array)
+        self.offset = np.median(self.smoothed_torque_array)
+        self.min_DF20 = min(self.torque_array)
+
+        self.max_DF20 = self.get_max()
+        rospy.set_param('max_DF20', self.max_DF20)
+
+        print("Rest")
+        rospy.sleep(5)
+
+        # self.sample_count = 0
+        # self.emg_win = []
+        self.emg_win2 = []
+        self.emg_array = []
+        self.smoothed_torque_array = []
+        self.torque_array_for_plot = []
+
+        desired_traj = self.make_traj_trap(self.torque_offset,self.max_PFn20,trial_length)
+        self.axs.plot([-1*num for num in desired_traj], color='blue')
+        self.axs.set_xlim(0, trial_length)
+        self.axs.set_ylim(-0.50*self.max_PFn20, 0.50*self.max_PFn20)
+
+        start_index = len(self.torque_array_for_plot)
         start = rospy.Time.now()
         self.start_time = start.to_sec()
         self.time = []
 
-        self.min_DF20 = min(self.torque_array)
-        self.torque_offset = self.min_DF20
-
         while (rospy.Time.now() < start + duration):
             try:
-                self.axs.plot(self.time[0:len(self.smoothed_torque_array)], np.abs(self.smoothed_torque_array[start_index:]), color='red')
+                self.axs.plot(self.time, self.torque_array_for_plot[start_index:], color='red')
             except:
                 pass
             plt.pause(.01)
@@ -646,10 +732,10 @@ class calibrate:
         return emg_array #filtered #filtered[iBase,:], filtered[iPF20,:], filtered[iPF0,:], filtered[iPFn20,:], filtered[iDF0,:], filtered[iDF20,:] 
 
     def calibration(self):
-        # self.emg_sub.unregister()
-        # self.torque_sub.unregister()
+        self.emg_sub.unregister()
+        self.torque_sub.unregister()
 
-        # print("If you just got a broken pipe error but are seeing this message, all is well")
+        print("If you just got a broken pipe error but are seeing this message, all is well")
 
         path = rospy.get_param("/file_dir")
         raw_torque_df = pd.DataFrame(self.raw_torque_array)
@@ -677,6 +763,18 @@ class calibrate:
         print(self.PF20_emg_array.shape)
         print(len(self.PF20_torque_array))
 
+        # for trial in [self.baseline_emg_array, self.PF20_emg_array, self.PF0_emg_array, self.PFn20_emg_array, self.DF0_emg_array, self.DF20_emg_array]:
+        #     win = []
+        #     for i in range(3):
+        #         for j in range(len(trial[:,i])):
+        #             if j < 100:
+        #                 win.append(trial[j,i])
+        #             else:
+        #                 win.pop(0)
+        #                 win.append(trial[j,i])
+
+        #             trial[j,i] = np.mean(win)
+
         for i in range(n):
             x0 = signal.resample(self.baseline_emg_array[:,i], len(self.baseline_torque_array))
             x1 = signal.resample(self.PF20_emg_array[:,i], len(self.PF20_torque_array))
@@ -698,10 +796,6 @@ class calibrate:
         angles = np.concatenate((0*np.ones(len(self.baseline_torque_array)), 10*np.ones(len(self.PF20_torque_array)), 0*np.ones(len(self.PF0_torque_array)), -10*np.ones(len(self.PFn20_torque_array)), 0*np.ones(len(self.DF0_torque_array)), 10*np.ones(len(self.DF20_torque_array))))
         angles = pd.DataFrame({'Angles': angles})
         emg_df = pd.concat([emg_df, angles],axis=1)
-        
-        for i in range(n):
-            muscle = 'Muscle '+str(muscles[i])
-            emg_df[muscle] = emg_df[muscle].rolling(emg_window).mean()
         
         emg_df = emg_df.dropna()
 
@@ -745,8 +839,13 @@ class calibrate:
         X_emg = emg_df.loc[:,emg_df.columns != 'Torque']
         y_emg = emg_df['Torque']
         
+        # emg_gpr = GaussianProcessRegressor().fit(X_emg, y_emg)
+        # emg_r2 = emg_gpr.score(emg_test_df.loc[:,emg_test_df.columns != 'Torque'], emg_test_df['Torque'])
+        # print("R^2: ", emg_r2)
+
+        # joblib.dump(emg_gpr, path + "/src/talker_listener/emg_gpr")
         p0 = np.zeros(15) #np.zeros(2*(n+1))
-        #p0[-1] = 1
+        p0[-1] = 1
         emg_res = sp.optimize.minimize(self.err, p0, args=(emg_df)) #curve_fit(self.objective, X_emg.T, y_emg.T.to_numpy(), p0 = p0, check_finite=False)
         emg_coef = emg_res.x
         emg_coef = [float(x) for x in emg_coef]
@@ -788,8 +887,10 @@ class calibrate:
 
         # print(self.timer)
         # print("Measured Frequency: ", 1/(rospy.get_time() - self.timer))
-        # self.timer = rospy.get_time()
+        self.timer = rospy.get_time()
 
+        # print("Torque Header: ", sensor_reading.header)
+        # print("EMG Header: ", hdEMG.header)
         # print("Hello?")
 
         # print("TIME IN: ", rospy.get_rostime())
@@ -800,29 +901,26 @@ class calibrate:
         
         self.torque_array.append(torque)
 
-        if self.sample_count >= torque_window:
-            self.torque_avg -= self.torque_array[-torque_window]/torque_window
-            self.torque_avg += torque/torque_window
-            self.smoothed_torque_array.append(self.torque_avg)
-        else:
-            self.torque_avg += torque/torque_window 
-            self.smoothed_torque_array.append(torque)
+        # if self.sample_count >= torque_window:
+        #     self.torque_avg -= self.torque_array[-torque_window]/torque_window
+        #     self.torque_avg += torque/torque_window
+        #     self.smoothed_torque_array.append(self.torque_avg)
+        # else:
+        #     self.torque_avg += torque/torque_window 
+        #     self.smoothed_torque_array.append(torque)
         
         self.time.append(rospy.Time.now().to_sec() - self.start_time)
 
-        # if len(self.torque_array) > 0:
-        #     if (len(self.torque_array) <= torque_window):
-        #         avg = np.mean(self.torque_array)
-        #         self.smoothed_torque_array.append(avg)
-        #     else:
-        #         avg = np.sum(self.torque_array[-1*torque_window:]) / torque_window
-        #         self.smoothed_torque_array.append(avg)
-        
-        #     self.time.append(rospy.Time.now().to_sec() - self.start_time)
-
-        #     if self.smoothed_torque_array[-1] > self.max_torque:
-        #         rospy.set_param('Max_Torque', torque)    
-        #         self.max_torque = torque
+        if (len(self.torque_array) <= torque_window):
+            avg = np.mean(self.torque_array)
+            self.smoothed_torque_array.append(avg)
+        else:
+            avg = np.sum(self.torque_array[-1*torque_window:]) / torque_window
+            self.smoothed_torque_array.append(avg)
+    
+        if self.smoothed_torque_array[-1] > self.max_torque:
+            rospy.set_param('Max_Torque', torque)    
+            self.max_torque = torque
 
         num_groups = len(hdEMG.data.data) // 64
 
@@ -874,6 +972,9 @@ class calibrate:
 
 
     def torque_calib(self,sensor_reading):
+        # print("Measured Frequency: ", 1/(rospy.get_time() - self.timer))
+        # self.timer = rospy.get_time()
+
         torque = sensor_reading.joint_torque_sensor[2]
         
         self.raw_torque_array.append(torque)
@@ -886,12 +987,12 @@ class calibrate:
                 avg = np.sum(self.torque_array[-1*torque_window:]) / torque_window
                 self.smoothed_torque_array.append(avg)
         
+            self.torque_array_for_plot.append(avg-self.offset)
             self.time.append(rospy.Time.now().to_sec() - self.start_time)
 
             if self.smoothed_torque_array[-1] > self.max_torque:
                 rospy.set_param('Max_Torque', torque)    
                 self.max_torque = torque
-
 
     def emg_calib(self,hdEMG):
         # print(self.timer)
@@ -899,9 +1000,49 @@ class calibrate:
         # self.timer = rospy.get_time()
 
         # self.batch_ready = False
-        # num_groups = len(hdEMG.data.data) // 64
+        reading = hdEMG.data.data
+        self.raw_emg_array.append(reading)
+        num_groups = len(reading) // 64
+        # self.emg_array.append([0,0,0])
 
-        self.rawest_emg_array.append(hdEMG.data.data)
+        # if self.sample_count < emg_window:
+        #     self.emg_win.append(reading)
+        # else:
+        #     self.emg_win.pop(0)
+        #     self.emg_win.append(reading)
+        
+        #smoothed_reading = np.mean(self.emg_win, axis=0)
+
+        # sample = []
+        # for j in range(n):
+        #     sample.append(np.sqrt(np.mean([sample**2 for index,sample in enumerate(samples[muscles[j]]) if index not in noisy_channels[j]])))
+
+        # self.emg_array.append(sample)
+
+        samples = []
+        for j in range(num_groups):
+            muscle = list(reading[64*j : 64*j + 64])
+            if j in muscles:
+                samples.append(muscle)
+
+        if self.sample_count < emg_window:
+            self.emg_win.append(samples)
+        else:
+            self.emg_win.pop(0)
+            self.emg_win.append(samples)
+
+        # print(np.array(self.emg_win).shape)
+        smoothed_reading = np.mean(self.emg_win, axis=0)
+        # print(np.array(smoothed_reading).shape)
+        # smoothed_reading = samples
+
+        sample = []
+        for j in range(n):
+            sample.append(np.sqrt(np.mean([sample**2 for sample in smoothed_reading[j]])))
+
+        self.emg_array.append(sample)
+
+
         # print(len(self.raw_emg_array))
 
         # if len(self.raw_emg_array) > 27:
@@ -969,7 +1110,7 @@ class calibrate:
         # #         cst.append(np.sum(nueral_drive[:,i]))
         # #     self.cst_array.append(cst)
                 
-        # self.sample_count += 1
+        self.sample_count += 1
 
 
 if __name__ == '__main__':

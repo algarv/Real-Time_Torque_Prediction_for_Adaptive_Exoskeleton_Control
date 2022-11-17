@@ -20,10 +20,11 @@ smoothing_window = 2048 * 10**5 #samples (2048 Hz * 100 ms window)
 data = []
 timestamp = []
 
-nyquist = .5 * 2048
-window = [20/nyquist, 50/nyquist]
-filtering_window = 2000
+nyquist = .5 * 512 #.5 * 2048
+window = [20/nyquist, 500/nyquist]
+filtering_window = 100
 # b, a = signal.butter(4, window, btype='bandpass')
+# high_b, high_a = signal.butter(4, window, btype='bandpass')
 high_b, high_a = signal.butter(4, 20/nyquist, btype='highpass')
 
 num_samples = 0 
@@ -33,7 +34,7 @@ def startup():
     # number of channels (408 for the quattrocento device)
     nchan = 384+16+8
     # sampling frequency (set in OT BioLab Light)
-    fsamp = 2048
+    fsamp = 512 #2048
     # number of bytes in sample (2 bytes for the quattrocento device)
     nbytes = 2
     # set duration of trial (seconds)
@@ -129,7 +130,7 @@ def record_print(q_socket, nchan, nbytes):
 
 if __name__ == '__main__':
     rospy.init_node('QC_stream_node')
-    r = rospy.Rate(2048)
+    r = rospy.Rate(512)
     pub = rospy.Publisher('hdEMG_stream', hdemg, queue_size=1)
     
     #avg_window = 100 #10**5
@@ -146,35 +147,68 @@ if __name__ == '__main__':
         reading = record_print(q_socket, nchan, nbytes)
         stamped_sample = hdemg()
         stamped_sample.header.stamp = rospy.get_rostime() #rospy.Time.now()
+        sample_count += 1
 
-        if sample_count < filtering_window:
+        # sample = Float64MultiArray()
+        # sample.data = reading
+
+        # dim = []
+        # dim.append(MultiArrayDimension("rows", 1, 6*64))
+        # dim.append(MultiArrayDimension("columns", 1, 1))
+
+        # sample.layout.dim = dim
+
+        # stamped_sample.data = sample
+
+        # pub.publish(stamped_sample)
+
+        # r.sleep()
+
+        if sample_count <= filtering_window:
             win.append(reading)
+
+            if sample_count % 5 == 0:
+                sample = Float64MultiArray()
+                sample.data = np.mean(win, axis=0) # reading
+
+                dim = []
+                dim.append(MultiArrayDimension("rows", 1, 6*64))
+                dim.append(MultiArrayDimension("columns", 1, 1))
+
+                sample.layout.dim = dim
+
+                stamped_sample.data = sample
+
+                pub.publish(stamped_sample)
+
+            r.sleep()
         else:
             win.pop(0)
             win.append(reading)
-            # sample_ready = True
-        
-        # if sample_ready:
-        #     smoothed_reading = np.mean(win, axis=0)
-        
-        filtered = signal.filtfilt(high_b, high_a, win, axis=0).tolist()
-        filtered = np.array(filtered)
 
+            if sample_count % 5 == 0:
+                filtered=win.copy()
+                # for j in range(1,5):
+                #     b, a = signal.iirnotch(123*j,30, 2048)
+                #     filtered = signal.filtfilt(b,a, filtered, axis=0).tolist()
+                #     filtered = np.array(filtered)
 
-        sample = Float64MultiArray()
-        sample.data = filtered #reading #smoothed_reading
+                # b, a = signal.iirnotch(60,30, 2048)
+                # filtered = signal.filtfilt(b,a, filtered, axis=0).tolist()
 
-        dim = []
-        dim.append(MultiArrayDimension("rows", 1, 6*64))
-        dim.append(MultiArrayDimension("columns", 1, 1))
-        
-        sample.layout.dim = dim        
-        
-        stamped_sample.data = sample
+                filtered = signal.filtfilt(high_b, high_a, filtered, axis=0).tolist()
+                
+                sample = Float64MultiArray()
+                sample.data = np.mean(filtered[-5:], axis=0) #filtered[-1] #smoothed_reading
 
-        pub.publish(stamped_sample)
-        # print("Measured Frequency: ", 1/(rospy.get_time() - timer))
-        # timer = rospy.get_time()
-        sample_count += 1
+                dim = []
+                dim.append(MultiArrayDimension("rows", 1, 6*64))
+                dim.append(MultiArrayDimension("columns", 1, 1))
 
-        r.sleep()
+                sample.layout.dim = dim
+
+                stamped_sample.data = sample
+
+                pub.publish(stamped_sample)
+
+                r.sleep()
