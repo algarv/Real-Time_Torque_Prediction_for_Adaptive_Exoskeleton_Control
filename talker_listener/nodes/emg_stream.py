@@ -27,7 +27,7 @@ def main():
     data = []
     path = rospy.get_param("/file_dir")
     
-    df = pd.read_csv(path+"/src/talker_listener/raw_emg_13.csv")
+    df = pd.read_csv(path+"/src/talker_listener/raw_emg_36.csv")
     df = df.iloc[:,1:].dropna()
 
     # stream = open(path + "/src/talker_listener/raw_emg_9_edit.csv")
@@ -77,8 +77,8 @@ def main():
                 sample.data = np.mean(win, axis=0) # reading
 
                 dim = []
-                dim.append(MultiArrayDimension("rows", 1, 6*64))
-                dim.append(MultiArrayDimension("columns", 1, 1))
+                dim.append(MultiArrayDimension("rows", 1, 1))
+                dim.append(MultiArrayDimension("columns", 1, 408))
 
                 sample.layout.dim = dim
 
@@ -107,8 +107,8 @@ def main():
                 sample.data = np.mean(filtered[-20:], axis=0) #filtered[-1] #smoothed_reading
 
                 dim = []
-                dim.append(MultiArrayDimension("rows", 1, 6*64))
-                dim.append(MultiArrayDimension("columns", 1, 1))
+                dim.append(MultiArrayDimension("rows", 1, 1))
+                dim.append(MultiArrayDimension("columns", 1, 408))
 
                 sample.layout.dim = dim
 

@@ -148,67 +148,70 @@ if __name__ == '__main__':
         stamped_sample = hdemg()
         stamped_sample.header.stamp = rospy.get_rostime() #rospy.Time.now()
         sample_count += 1
+        
+        if sample_count % 5 == 0:
+            
+            sample = Float64MultiArray()
+            sample.data = reading
 
-        # sample = Float64MultiArray()
-        # sample.data = reading
+            dim = []
+            dim.append(MultiArrayDimension("rows", 1, 6*64))
+            dim.append(MultiArrayDimension("columns", 1, 1))
 
-        # dim = []
-        # dim.append(MultiArrayDimension("rows", 1, 6*64))
-        # dim.append(MultiArrayDimension("columns", 1, 1))
+            sample.layout.dim = dim
 
-        # sample.layout.dim = dim
+            stamped_sample.data = sample
 
-        # stamped_sample.data = sample
 
-        # pub.publish(stamped_sample)
-
-        # r.sleep()
-
-        if sample_count <= filtering_window:
-            win.append(reading)
-
-            if sample_count % 5 == 0:
-                sample = Float64MultiArray()
-                sample.data = np.mean(win, axis=0) # reading
-
-                dim = []
-                dim.append(MultiArrayDimension("rows", 1, 6*64))
-                dim.append(MultiArrayDimension("columns", 1, 1))
-
-                sample.layout.dim = dim
-
-                stamped_sample.data = sample
-
-                pub.publish(stamped_sample)
+            pub.publish(stamped_sample)
 
             r.sleep()
-        else:
-            win.pop(0)
-            win.append(reading)
 
-            if sample_count % 5 == 0:
-                filtered=win.copy()
-                # for j in range(1,5):
-                #     b, a = signal.iirnotch(123*j,30, 2048)
-                #     filtered = signal.filtfilt(b,a, filtered, axis=0).tolist()
-                #     filtered = np.array(filtered)
+        # if sample_count <= filtering_window:
+        #     win.append(reading)
 
-                # b, a = signal.iirnotch(60,30, 2048)
-                # filtered = signal.filtfilt(b,a, filtered, axis=0).tolist()
+        #     if sample_count % 5 == 0:
+        #         sample = Float64MultiArray()
+        #         sample.data = reading #np.mean(win, axis=0) # reading
 
-                filtered = signal.filtfilt(high_b, high_a, filtered, axis=0).tolist()
+        #         dim = []
+        #         dim.append(MultiArrayDimension("rows", 1, 1))
+        #         dim.append(MultiArrayDimension("columns", 1, 408))
+
+        #         sample.layout.dim = dim
+
+        #         stamped_sample.data = sample
+
+        #         pub.publish(stamped_sample)
+
+        #         r.sleep()
+        # else:
+        #     win.pop(0)
+        #     win.append(reading)
+
+        #     if sample_count % 5 == 0:
+        #         # filtered=win.copy()
+        #         # for j in range(1,5):
+        #         #     b, a = signal.iirnotch(123*j,30, 2048)
+        #         #     filtered = signal.filtfilt(b,a, filtered, axis=0).tolist()
+        #         #     filtered = np.array(filtered)
+
+        #         # b, a = signal.iirnotch(60,30, 2048)
+        #         # filtered = signal.filtfilt(b,a, filtered, axis=0).tolist()
+
+        #         # filtered = signal.filtfilt(high_b, high_a, filtered, axis=0).tolist()
                 
-                sample = Float64MultiArray()
-                sample.data = np.mean(filtered[-5:], axis=0) #filtered[-1] #smoothed_reading
+        #         sample = Float64MultiArray()
+        #         sample.data = reading #filtered[-1] #np.mean(filtered[-5:], axis=0) #filtered[-1] #smoothed_reading
 
-                dim = []
-                dim.append(MultiArrayDimension("rows", 1, 6*64))
-                dim.append(MultiArrayDimension("columns", 1, 1))
+        #         dim = []
+        #         dim.append(MultiArrayDimension("rows", 1, 1))
+        #         dim.append(MultiArrayDimension("columns", 1, 408))
 
-                sample.layout.dim = dim
+        #         sample.layout.dim = dim
 
-                stamped_sample.data = sample
+        #         stamped_sample.data = sample
 
-                pub.publish(stamped_sample)
+        #         pub.publish(stamped_sample)
 
-                r.sleep()
+        #         r.sleep()

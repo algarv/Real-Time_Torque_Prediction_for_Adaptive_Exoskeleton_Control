@@ -47,8 +47,8 @@ nyquist = .5 * 2048.0
 filter_window = [20.0/nyquist, 500.0/nyquist]
 
 win = 40
-emg_window = 300 #samples
-torque_window = 50 #samples
+emg_window = 100 #samples
+torque_window = 25 #samples
 
 # Parameters to Organize Raw EMG Data #
 muscles = [2, 3, 4] # Channels of the inputs on the Quattrocento #MUST BE THE SAME IN BOTH FILES
@@ -97,7 +97,7 @@ class calibrate:
         self.DF10_array = []
         self.emg_array = []
         self.emg_win = []
-        self.emg_win2 = []
+        self.smooth_emg_win = []
         self.emg_avg = [0 for i in range(n)]
         self.cst_array = []
         self.raw_torque_array = []
@@ -111,7 +111,7 @@ class calibrate:
         if skip:
             rospy.wait_for_message('/h3/robot_states', State,timeout=None)
             rospy.wait_for_message('hdEMG_stream',hdemg,timeout=None)
-            rospy.set_param('emg_coef', [-0.05924206632548324, 0.07308002852834987, -0.010205697520960628, 0.014988316415483847, 0.19686142439328932, -0.472474122679755, -0.03572108260612725, 0.06991187788416942, -0.31417410726300765, 0.5325433423014446, 0.021067465788979348, -0.03927366176608191, 0.3077862163158001, -0.6202070457882917, 2.627966320043538]) #[1.6553566115671112, -3.3150770132099012, 1.6553566115671123, -0.3251285848589391, -0.02815857136421618, 0.01869688004015378, 0.01869688004015207, 1.6716279865773398]) #[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0])
+            rospy.set_param('emg_coef', [-8.57409162e-02, -1.00146085e+00, 2.54005172e-03, 1.60128219e-02, 8.90337001e-02, 1.58813251e+00, -3.65757650e-03, -2.47658331e-02, 5.08335815e-02, -2.35550813e-01, -1.54598354e-03, -7.65382330e-03, 5.86822916e-01, 2.87710463e+00, -1.37723825e+01])
             rospy.set_param('cst_coef', [0.613430299271461, 0.9098084781400041, 0.409857422818683, -0.20047670400913495, 0.08541811441013507, -4.42430850813377])#[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0])
             rospy.set_param('calibrated', True)
         else:
@@ -154,7 +154,7 @@ class calibrate:
         ''' Create a trapezoidal trajectory based on the MVC measurement '''
 
         step = int(len/5)
-        max = .2 * (max - min)
+        max = .5 * (max - min)
         desired_traj = []
         for i in range(0, int(.5*step)):
             desired_traj.append(0)
@@ -176,6 +176,12 @@ class calibrate:
 
         self.sample_count = 0
         self.emg_win = []
+        self.smooth_emg_win = []
+
+        # Move to 0 degrees
+        rospy.loginfo("Moving to 0")
+        self.pos_pub.publish(float(0.0))
+        rospy.sleep(5)
 
         rospy.loginfo("Collecting baseline")
         self.pos_pub.publish(float(0.0))
@@ -215,6 +221,7 @@ class calibrate:
 
         self.sample_count = 0
         self.emg_win = []
+        self.smooth_emg_win = []
 
         # Move to 0 degrees
         rospy.loginfo("Moving to 0")
@@ -226,7 +233,6 @@ class calibrate:
         self.smoothed_torque_array = []
         self.emg_array = []
         self.smoothed_emg_array = []
-        self.emg_win2 = []
         self.PF0_start = len(self.raw_emg_array)
         self.cst_array = []
         # self.time = []
@@ -251,7 +257,6 @@ class calibrate:
 
         # self.sample_count = 0
         # self.emg_win = []
-        self.emg_win2 = []
         self.emg_array = []
         self.smoothed_torque_array = []
         self.torque_array_for_plot = []
@@ -305,6 +310,7 @@ class calibrate:
 
         self.sample_count = 0
         self.emg_win = []
+        self.smooth_emg_win = []
 
         rospy.loginfo("Moving to 10 degrees")
         self.pos_pub.publish(0.17)
@@ -377,6 +383,7 @@ class calibrate:
 
         self.sample_count = 0
         self.emg_win = []
+        self.smooth_emg_win = []
 
         rospy.loginfo("Moving to -10 degrees")
         self.pos_pub.publish(-0.17)
@@ -409,7 +416,6 @@ class calibrate:
 
         # self.sample_count = 0
         # self.emg_win = []
-        self.emg_win2 = []
         self.emg_array = []
         self.smoothed_torque_array = []
         self.torque_array_for_plot = []
@@ -450,6 +456,7 @@ class calibrate:
 
         self.sample_count = 0
         self.emg_win = []
+        self.smooth_emg_win = []
 
         rospy.loginfo("Moving to 0 degrees")
         self.pos_pub.publish(0.0)
@@ -480,7 +487,6 @@ class calibrate:
 
         # self.sample_count = 0
         # self.emg_win = []
-        self.emg_win2 = []
         self.emg_array = []
         self.smoothed_torque_array = []
         self.torque_array_for_plot = []
@@ -521,6 +527,7 @@ class calibrate:
 
         self.sample_count = 0
         self.emg_win = []
+        self.smooth_emg_win = []
 
         rospy.loginfo("Moving to 20 degrees")
         self.pos_pub.publish(-0.17)
@@ -551,7 +558,6 @@ class calibrate:
 
         # self.sample_count = 0
         # self.emg_win = []
-        self.emg_win2 = []
         self.emg_array = []
         self.smoothed_torque_array = []
         self.torque_array_for_plot = []
@@ -799,6 +805,16 @@ class calibrate:
         
         emg_df = emg_df.dropna()
 
+        b, a = signal.butter(4, .5/(.5*100), btype='lowpass')
+        filtered = signal.filtfilt(b, a, emg_df, axis=0).tolist()
+        filtered = np.array(filtered)
+
+        emg_df.iloc[:,0] = filtered[:,0]
+        emg_df.iloc[:,1] = filtered[:,1]
+        emg_df.iloc[:,2] = filtered[:,2]
+        emg_df.iloc[:,3] = filtered[:,3]
+        emg_df.iloc[:,4] = filtered[:,4]
+
         path = rospy.get_param("/file_dir")
         emg_df.to_csv(path + "/src/talker_listener/test_data_EMG.csv")
 
@@ -821,8 +837,8 @@ class calibrate:
         # path = rospy.get_param("/file_dir")
         # cst_df.to_csv(path + "/src/talker_listener/test_data_CST.csv")
 
-        cst_df, cst_test_df = train_test_split(cst_df, test_size=.20)
-        emg_df, emg_test_df = train_test_split(emg_df, test_size=.20)
+        # cst_df, cst_test_df = train_test_split(cst_df, test_size=.20)
+        # emg_df, emg_test_df = train_test_split(emg_df, test_size=.20)
 
         rospy.loginfo('EMG: ')
         print(emg_df)
@@ -836,8 +852,8 @@ class calibrate:
         # emg_int = float(emg_res.intercept_)
         # emg_coef = [float(x) for x in emg_res.coef_.tolist()]
 
-        X_emg = emg_df.loc[:,emg_df.columns != 'Torque']
-        y_emg = emg_df['Torque']
+        # X_emg = emg_df.loc[:,emg_df.columns != 'Torque']
+        # y_emg = emg_df['Torque']
         
         # emg_gpr = GaussianProcessRegressor().fit(X_emg, y_emg)
         # emg_r2 = emg_gpr.score(emg_test_df.loc[:,emg_test_df.columns != 'Torque'], emg_test_df['Torque'])
@@ -871,7 +887,7 @@ class calibrate:
         # print('CST Cov: ', cst_res[1])
 
         # cst_r2, cst_RMSE = self.calc_r2(cst_test_df['Torque'], cst_test_df.loc[:,cst_test_df.columns != 'Torque'], cst_coef)
-        emg_r2, emg_RMSE = self.calc_r2(emg_test_df['Torque'], emg_test_df.loc[:,emg_test_df.columns != 'Torque'], emg_coef)
+        emg_r2, emg_RMSE = self.calc_r2(emg_df['Torque'], emg_df.loc[:,emg_df.columns != 'Torque'], emg_coef)
         # rospy.loginfo("CST R^2, RMSE: ")
         # rospy.loginfo(cst_r2)
         # rospy.loginfo(cst_RMSE)
@@ -1023,7 +1039,7 @@ class calibrate:
         for j in range(num_groups):
             muscle = list(reading[64*j : 64*j + 64])
             if j in muscles:
-                samples.append(muscle)
+                samples.append([m**2 for m in muscle])
 
         if self.sample_count < emg_window:
             self.emg_win.append(samples)
@@ -1032,16 +1048,25 @@ class calibrate:
             self.emg_win.append(samples)
 
         # print(np.array(self.emg_win).shape)
-        smoothed_reading = np.mean(self.emg_win, axis=0)
+        smoothed_reading =  np.sqrt(np.mean(self.emg_win, axis=0))
         # print(np.array(smoothed_reading).shape)
         # smoothed_reading = samples
 
         sample = []
         for j in range(n):
-            sample.append(np.sqrt(np.mean([sample**2 for sample in smoothed_reading[j]])))
+            sample.append(np.mean(smoothed_reading[j]))#np.sqrt(np.mean([sample**2 for sample in smoothed_reading[j]])))
+
+        # if self.sample_count < emg_window:
+        #     self.smooth_emg_win.append(sample)
+        # else:
+        #     self.smooth_emg_win.pop(0)
+        #     self.smooth_emg_win.append(sample)
+        
+        # smoothed = np.mean(self.smooth_emg_win, axis=0)
+
+        # self.emg_array.append(smoothed)
 
         self.emg_array.append(sample)
-
 
         # print(len(self.raw_emg_array))
 

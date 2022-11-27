@@ -15,7 +15,7 @@ def main():
     i = 0
 
     path = rospy.get_param("/file_dir")
-    df = pd.read_csv(path+"/src/talker_listener/raw_torque_13.csv")
+    df = pd.read_csv(path+"/src/talker_listener/raw_torque_36.csv")
     df = df.iloc[:,1:].dropna()
     data = df.to_numpy()
     # stream = open(path + "/src/talker_listener/raw_torque_13.csv")

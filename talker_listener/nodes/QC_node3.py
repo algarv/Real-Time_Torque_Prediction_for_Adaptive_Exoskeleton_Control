@@ -63,6 +63,7 @@ class QC_node:
         self.emg_array = []
         self.raw_emg_array = []
         self.emg_win = []
+        self.smooth_emg_win = []
         self.cst_array = []
         self.theta = 0
         # self.fig, self.axs = plt.subplots()
@@ -75,7 +76,7 @@ class QC_node:
                 if self.first_run == True:
                     self.sample_count = 0
                     self.sample = np.zeros((n, win, 64))
-                    self.gpr = joblib.load(path + "/src/talker_listener/emg_gpr")
+                    # self.gpr = joblib.load(path + "/src/talker_listener/emg_gpr")
 
                 self.first_run = False
 
@@ -120,23 +121,25 @@ class QC_node:
         num_groups = len(reading) // 64
         self.raw_emg_array.append(reading)
 
-        if self.sample_count < emg_window:
-            self.emg_win.append(reading)
-        else:
-            self.emg_win.pop(0)
-            self.emg_win.append(reading)
-        
-        smoothed_reading = np.mean(self.emg_win, axis=0)
-
         samples = []
         for j in range(num_groups):
-            muscle = list(smoothed_reading[64*j : 64*j + 64])
-            samples.append(muscle)
+            muscle = list(reading[64*j : 64*j + 64])
+            if j in muscles:
+                samples.append([m**2 for m in muscle])
+
+        if self.sample_count < emg_window:
+            self.emg_win.append(samples)
+        else:
+            self.emg_win.pop(0)
+            self.emg_win.append(samples)
+
+        smoothed_reading =  np.sqrt(np.mean(self.emg_win, axis=0))
 
         sample = []
         for j in range(n):
-            sample.append(np.sqrt(np.mean([sample**2 for index,sample in enumerate(samples[muscles[j]]) if index not in noisy_channels[j]])))
+            sample.append(np.mean(smoothed_reading[j]))#np.sqrt(np.mean([sample**2 for sample in smoothed_reading[j]])))
 
+        
         self.emg_array.append(sample)
 
         self.sample_array = sample + [self.theta]
@@ -213,9 +216,9 @@ class QC_node:
 
     def calc_torque_emg(self):
         coef = rospy.get_param('emg_coef')
-        print(len(self.emg_array))
+        # print(len(self.emg_array))
         if len(self.emg_array) > 0:
-            print(self.sample_array)
+            # print(self.sample_array)
             #torque_cmd = self.gpr.predict(np.array([self.sample_array]))
             torque_cmd = self.f(pd.DataFrame(self.sample_array), coef)
             
@@ -226,7 +229,7 @@ class QC_node:
             # torque_cmd += theta * coef[n]
             # torque_cmd += coef[-1]
 
-            return torque_cmd[0]
+            return -1*torque_cmd[0]
         
     def f(self, X, betas):
         ones = pd.DataFrame({'ones': np.ones(X.iloc[1,:].size) }).T
