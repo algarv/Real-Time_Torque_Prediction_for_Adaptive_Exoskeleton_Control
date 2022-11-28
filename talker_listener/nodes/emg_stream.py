@@ -69,55 +69,23 @@ def main():
         if i >= len(data): #len(row) - 4:
             i = 0
 
-        if sample_count <= filtering_window:
-            win.append(reading)
+        if sample_count % 5 == 0:
+            
+            sample = Float64MultiArray()
+            sample.data = reading
 
-            if sample_count % 20 == 0:
-                sample = Float64MultiArray()
-                sample.data = np.mean(win, axis=0) # reading
+            dim = []
+            dim.append(MultiArrayDimension("rows", 1, 6*64))
+            dim.append(MultiArrayDimension("columns", 1, 1))
 
-                dim = []
-                dim.append(MultiArrayDimension("rows", 1, 1))
-                dim.append(MultiArrayDimension("columns", 1, 408))
+            sample.layout.dim = dim
 
-                sample.layout.dim = dim
+            stamped_sample.data = sample
 
-                stamped_sample.data = sample
 
-                pub.publish(stamped_sample)
+            pub.publish(stamped_sample)
 
             r.sleep()
-        else:
-            win.pop(0)
-            win.append(reading)
-
-            if sample_count % 20 == 0:
-                filtered=win.copy()
-                # for j in range(1,5):
-                #     b, a = signal.iirnotch(123*j,30, 2048)
-                #     filtered = signal.filtfilt(b,a, filtered, axis=0).tolist()
-                #     filtered = np.array(filtered)
-
-                # b, a = signal.iirnotch(60,30, 2048)
-                # filtered = signal.filtfilt(b,a, filtered, axis=0).tolist()
-
-                filtered = signal.filtfilt(high_b, high_a, filtered, axis=0).tolist()
-                
-                sample = Float64MultiArray()
-                sample.data = np.mean(filtered[-20:], axis=0) #filtered[-1] #smoothed_reading
-
-                dim = []
-                dim.append(MultiArrayDimension("rows", 1, 1))
-                dim.append(MultiArrayDimension("columns", 1, 408))
-
-                sample.layout.dim = dim
-
-                stamped_sample.data = sample
-
-                pub.publish(stamped_sample)
-
-                r.sleep()
-
 
 if __name__ == '__main__':
     try:
