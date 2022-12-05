@@ -170,7 +170,7 @@ class QC_node:
         self.sample_count += 1
         
 
-    def sensor_callback(self,sensor_reading): #,hdEMG):
+    def sensor_callback(self,sensor_reading):
         # print("HELLO")
         self.theta = sensor_reading.joint_position[2]
         self.theta_dot = sensor_reading.joint_velocity[2]

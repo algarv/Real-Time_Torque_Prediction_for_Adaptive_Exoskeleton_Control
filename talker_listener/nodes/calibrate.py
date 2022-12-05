@@ -53,7 +53,7 @@ torque_window = 25 #samples
 # Parameters to Organize Raw EMG Data #
 muscles = [2, 3, 4] # Channels of the inputs on the Quattrocento #MUST BE THE SAME IN BOTH FILES
 n = len(muscles)
-noisy_channels = [[],[],[]]
+noisy_channels = [[27],[],[0, 1, 2, 3, 4, 5]]
 
 # Option to skip the calibration procedure for testing purposes
 skip = False
@@ -195,7 +195,16 @@ class calibrate:
 
         self.cst_array = []
 
-        self.data_collection()
+        if skip:
+            rospy.wait_for_message('/h3/robot_states', State,timeout=None)
+            rospy.wait_for_message('hdEMG_stream',hdemg,timeout=None)
+            rospy.set_param('emg_coef', [-8.57409162e-02, -1.00146085e+00, 2.54005172e-03, 1.60128219e-02, 8.90337001e-02, 1.58813251e+00, -3.65757650e-03, -2.47658331e-02, 5.08335815e-02, -2.35550813e-01, -1.54598354e-03, -7.65382330e-03, 5.86822916e-01, 2.87710463e+00, -1.37723825e+01])
+            rospy.set_param('cst_coef', [0.613430299271461, 0.9098084781400041, 0.409857422818683, -0.20047670400913495, 0.08541811441013507, -4.42430850813377])#[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0])
+            rospy.set_param('calibrated', True)
+        else:
+            rospy.wait_for_message('hdEMG_stream',hdemg,timeout=None)
+            rospy.loginfo("Starting Baseline")
+            self.data_collection()
 
     def max(self):
         ''' Record the maximum voluntary contraction (MVC) over a 5 second period'''
@@ -393,11 +402,11 @@ class calibrate:
         filtered = signal.filtfilt(b, a, emg_df, axis=0).tolist()
         filtered = np.array(filtered)
 
-        emg_df.iloc[:,0] = filtered[:,0]
+        # emg_df.iloc[:,0] = filtered[:,0]
         emg_df.iloc[:,1] = filtered[:,1]
         emg_df.iloc[:,2] = filtered[:,2]
         emg_df.iloc[:,3] = filtered[:,3]
-        emg_df.iloc[:,4] = filtered[:,4]
+        # emg_df.iloc[:,4] = filtered[:,4]
 
         path = rospy.get_param("/file_dir")
         emg_df.to_csv(path + "/src/talker_listener/test_data_EMG.csv")
@@ -453,11 +462,14 @@ class calibrate:
         num_groups = len(reading) // 64
 
         samples = []
+        k = 0
         for j in range(num_groups):
             muscle = list(reading[64*j : 64*j + 64])
             if j in muscles:
                 samples.append([m**2 for m in muscle])
-
+                # samples.append([m**2 for ind, m in enumerate(muscle) if ind not in noisy_channels[k]])
+                k += 1
+        # print(samples)
         if self.sample_count < emg_window:
             self.emg_win.append(samples)
         else:
@@ -479,6 +491,7 @@ if __name__ == '__main__':
     try:
         rospy.init_node('calibration', log_level=rospy.DEBUG)
 
+        
         # Original #
         baseline = trial(0.0,25, None, "flat", 0.0)
         PF0 = trial(0.0, 25, "PF", "trap", 0.50)
@@ -488,6 +501,7 @@ if __name__ == '__main__':
         DF10 = trial(0.175, 25, "DF", "trap", 0.50)
         
         trials = [baseline, PF0, PF10, PFn10, DF0, DF10]
+        
 
         '''
         # Angle #
@@ -500,7 +514,7 @@ if __name__ == '__main__':
         
         trials = [baseline, PF5, PF15, PFn15, DF5, DF15]
         '''
-        
+
         '''
         # Intensities #
         baseline = trial(0.0,25, None, "flat", 0.0)
@@ -510,7 +524,7 @@ if __name__ == '__main__':
         DF0 = trial(0.0, 25, "DF", "trap", 0.250)
         DF10 = trial(0.175, 25, "DF", "trap", 0.250)
 
-        trials = [baseline, PF0, PF10, PFn10, DF0, DF10]
+        trials = [PF0, PF10, PFn10, DF0, DF10]
         '''
 
         '''
@@ -534,18 +548,20 @@ if __name__ == '__main__':
         DF0 = trial(0.0, 25, "DF", "sin", 0.50)
         DF10 = trial(0.175, 25, "DF", "sin", 0.50)
 
-        trials = [baseline, PF0, PF10, PFn10, DF0, DF10]
+        trials = [PF0, PF10, PFn10, DF0, DF10]
         '''
 
         '''
         # 2D Sinusoid #
         baseline = trial(0.0,25, None, "flat", 0.0)
-        sin0 = trial(0.0, 25, "DF", "sin", 0.50)
-        sin10 = trial(0.175, 25, "DF", "sin", 0.50)
-        sinm10 = trial(-0.175, 25, "DF", "sin", 0.50)
+        sin10 = trial(0.175, 25, "DF", "bi-sin", 0.50)
+        sin0 = trial(0.0, 25, "DF", "bi-sin", 0.50)
+        sinm10 = trial(-0.175, 25, "DF", "bi-sin", 0.50)
         
-        trials = [baseline, sin0, sin10, sinm10]
+        trials = [baseline, sin10, sin0, sinm10]
         '''
+
+        # trials = [PF10]
 
         calibration = calibrate(trials)
         rospy.spin()
