@@ -1,11 +1,13 @@
 <launch>
 
     <arg name = 'sim' default = 'false'/> 
+    <arg name = 'method' default = 'emg' />
     <param name="file_dir" value = "$(find talker_listener)" />
     <param name="calibrated" value = 'false'/>
 
     <group unless="$(arg sim)">
-        <node name="QC_stream_node" pkg="talker_listener" type="qc_stream_node.py" output="screen"/>
+        <node name="QC_stream_node_512" pkg="talker_listener" type="qc_stream_node_512.py" output="screen" if="$(eval arg('method') == 'cst')"/>
+        <node name="QC_stream_node_100" pkg="talker_listener" type="qc_stream_node_100.py" output="screen" if="$(eval arg('method') == 'emg')"/>
     </group>
 
     <group if="$(arg sim)">
@@ -13,7 +15,8 @@
         <node name="torque_stream" pkg="talker_listener" type="torque_stream.py" output="screen"/>
     </group>
 
-    <node name="calibration" pkg="talker_listener" type="calibrate.py" output="screen"/>
+    <node name="calibration_cst" pkg="talker_listener" type="calibrate_cst.py" output="screen" if="$(eval arg('method') == 'cst')"/>
+    <node name="calibration_emg" pkg="talker_listener" type="calibrate_emg.py" output="screen" if="$(eval arg('method') == 'emg')"/>
     <node name="QC_node" pkg="talker_listener" type="QC_node3.py" output="screen"/>
 
 </launch>

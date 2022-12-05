@@ -165,10 +165,12 @@ include_directories(
 catkin_install_python(
 	PROGRAMS
 	nodes/QC_node3.py
-	nodes/qc_stream_node.py
+	nodes/qc_stream_node_512.py
+  nodes/qc_stream_node_100.py
 	nodes/emg_stream.py
-	nodes/calibrate.py
-	nodes/torque_stream.py
+	nodes/calibrate_cst.py
+	nodes/calibrate_emg.py
+  nodes/torque_stream.py
 	DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
