@@ -53,7 +53,7 @@ torque_window = 25 #samples
 # Parameters to Organize Raw EMG Data #
 muscles = [2, 3, 4] # Channels of the inputs on the Quattrocento #MUST BE THE SAME IN BOTH FILES
 n = len(muscles)
-noisy_channels = [[27],[],[0, 1, 2, 3, 4, 5]]
+noisy_channels = [[],[],[]]
 
 # Option to skip the calibration procedure for testing purposes
 skip = False
