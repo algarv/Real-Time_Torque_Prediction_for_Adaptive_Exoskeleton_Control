@@ -55,7 +55,7 @@ cst_window = 40
 # Parameters to Organize Raw EMG Data #
 muscles = [2, 3, 4] # Channels of the inputs on the Quattrocento #MUST BE THE SAME IN BOTH FILES
 n = len(muscles)
-noisy_channels = [[27],[],[0, 1, 2, 3, 4, 5]]
+noisy_channels = [[],[],[]]
 
 sample = np.zeros((n, cst_window, 64))
 
@@ -371,6 +371,8 @@ class calibrate:
 
         print("If you just got a broken pipe error but are seeing this message, all is well")
 
+        emg_norm_vals = [0 for i in range(n)]
+
         path = rospy.get_param("/file_dir")
         raw_torque_df = pd.DataFrame(self.raw_torque_array)
         raw_torque_df.to_csv(path + "/src/talker_listener/raw_torque.csv")
@@ -378,10 +380,24 @@ class calibrate:
         raw_emg_df = pd.DataFrame(np.array(self.raw_emg_array))
         raw_emg_df.to_csv(path + "/src/talker_listener/raw_emg.csv")
         
+        for trial in self.trials:
+            # Maximum value for each muscle
+            print(trial.emg_array.shape)
+            for i in range(n):
+                if np.max(trial.emg_array[:,i,:]) > emg_norm_vals[i]:
+                    emg_norm_vals[i] = np.max(trial.emg_array[:,i,:])
+        print(emg_norm_vals)
+
+        rospy.set_param('emg_norm_vals',emg_norm_vals)
+
         t = 0
         for trial in self.trials:
+            for i in range(n):
+                trial.emg_array[:,i,:] /= emg_norm_vals[i]
+
             data = np.array(trial.emg_array).reshape(trial.emg_array.shape[0],trial.emg_array.shape[1]*trial.emg_array.shape[2])
             print(data.shape)
+
             cst = self.cst_predict(data)
             print(cst.shape)
 
@@ -530,7 +546,8 @@ class calibrate:
         for j in range(num_groups):
             muscle = list(reading[64*j : 64*j + 64])
             if j in muscles:
-                samples.append(muscle)
+                samples.append([s if (ind is not noisy_channels[muscles.index(j)]) else 0 for ind, s in enumerate(muscle) ])
+                print(samples)
 
         self.emg_array.append(samples)
 
@@ -538,7 +555,6 @@ if __name__ == '__main__':
     try:
         rospy.init_node('calibration_cst', log_level=rospy.DEBUG)
 
-        
         # Original #
         baseline = trial(0.0,25, None, "flat", 0.0)
         PF0 = trial(0.0, 25, "PF", "trap", 0.50)
