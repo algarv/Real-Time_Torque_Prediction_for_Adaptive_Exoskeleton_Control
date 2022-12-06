@@ -86,6 +86,12 @@ class trial:
 
         self.cst_array = []
 
+        self.emg_start_index = 0
+        self.torque_start_index = 0
+
+        self.emg_end_index = 0
+        self.torque_end_index = 0
+
     def torque_offset(self):
         if self.traj_shape == "flat":
             return np.mean(self.torque_array)
@@ -297,6 +303,7 @@ class calibrate:
             self.torque_array = []
             self.smoothed_torque_array = []
             
+
             self.cst_array = []
             duration = rospy.Duration.from_sec(trial_length)
             
@@ -321,6 +328,9 @@ class calibrate:
             self.emg_array = []
             self.smoothed_torque_array = []
             self.torque_array_for_plot = []
+
+            trial.emg_start_index = len(self.raw_emg_array)
+            trial.torque_start_index = len(self.raw_torque_array)
 
             # Create a 20% Effort trapezoid trajectory
             desired_traj = trial.traj(self.offset)
@@ -357,6 +367,9 @@ class calibrate:
             trial.emg_array = np.array(self.emg_array.copy())
             trial.cst_array = np.array(self.cst_array.copy())
             
+            trial.emg_end_index = len(self.raw_emg_array)
+            trial.torque_end_index = len(self.raw_torque_array)
+
             # Prepare the next trial
             rospy.loginfo("REST")
             rospy.sleep(rest_time)
@@ -379,6 +392,20 @@ class calibrate:
         raw_emg_df = pd.DataFrame(np.array(self.raw_emg_array))
         raw_emg_df.to_csv(path + "/src/talker_listener/raw_emg.csv")
         
+        emg_index_list = []
+        torque_index_list = []
+        for trial in trials:
+            emg_index_list.append([trial.emg_start_index, trial.emg_end_index])
+            torque_index_list.append([trial.torque_start_index, trial.torque_end_index])
+
+        file = open(path + "/src/talker_listener/" + "raw_data_indexes", 'w')
+        for pair in emg_index_list:
+            file.write("[" + str(pair[0]) + " " + str(pair[1]) + "]")
+        file.write('\n')
+        for pair in torque_index_list:
+            file.write("[" + str(pair[0]) + " " + str(pair[1]) + "]")
+        file.close()
+
         for trial in self.trials:
             # Maximum value for each muscle
             print(trial.emg_array.shape)
@@ -618,7 +645,7 @@ if __name__ == '__main__':
         trials = [baseline, sin10, sin0, sinm10]
         '''
 
-        trials = [PF10]
+        trials = [PF0, PF10]
 
         calibration = calibrate(trials)
         rospy.spin()
