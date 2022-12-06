@@ -14,7 +14,6 @@ Publishers:
     Name: /h3/right_ankle_position_controller/command Type: Float64
 '''
 
-from cv2 import log
 import rospy
 import numpy as np
 import scipy as sp
