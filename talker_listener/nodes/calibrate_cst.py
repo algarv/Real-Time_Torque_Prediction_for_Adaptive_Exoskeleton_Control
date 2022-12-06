@@ -378,13 +378,14 @@ class calibrate:
         self.calibration()
     
     def calibration(self):
+        
+        # Kill the subscribers to stop data collection
         self.emg_sub.unregister()
         self.torque_sub.unregister()
 
-        print("If you just got a broken pipe error but are seeing this message, all is well")
+        print("Unregistered subscribers (ignore any broken pipe errors)")
 
-        emg_norm_vals = [0 for i in range(n)]
-
+        #Save raw data
         path = rospy.get_param("/file_dir")
         raw_torque_df = pd.DataFrame(self.raw_torque_array)
         raw_torque_df.to_csv(path + "/src/talker_listener/raw_torque.csv")
@@ -392,6 +393,7 @@ class calibrate:
         raw_emg_df = pd.DataFrame(np.array(self.raw_emg_array))
         raw_emg_df.to_csv(path + "/src/talker_listener/raw_emg.csv")
         
+        #Save values to help index raw data
         emg_index_list = []
         torque_index_list = []
         for trial in trials:
@@ -406,15 +408,17 @@ class calibrate:
             file.write("[" + str(pair[0]) + " " + str(pair[1]) + "]")
         file.close()
 
+        #Find the normalization value for each muscle and save in the parameter server
+        emg_norm_vals = [0 for i in range(n)]
         for trial in self.trials:
             # Maximum value for each muscle
-            print(trial.emg_array.shape)
             for i in range(n):
                 if np.max(trial.emg_array[:,i,:]) > emg_norm_vals[i]:
                     emg_norm_vals[i] = np.max(trial.emg_array[:,i,:])
         
-        rospy.set_param('emg_norm_vals',[float(val) for val in emg_norm_vals])#emg_norm_vals)
+        rospy.set_param('emg_norm_vals',[float(val) for val in emg_norm_vals]) #Convert norm values to python floats instead of numpy floats
 
+        # Normalize each emg array, predict CSTs, and organize predictions into one data frame
         t = 0
         for trial in self.trials:
             for i in range(n):
@@ -427,18 +431,21 @@ class calibrate:
             print(cst.shape)
 
             if t == 0:
-                y = np.array(self.trials[0].torque_array - self.trials[0].torque_offset())
+                y = np.array(trial.torque_array - trial.torque_offset())
+                print(y.shape)
                 y = signal.resample(y, cst.shape[0])
-
+                print(y.shape)
                 x = cst
-
+                angles = trial.joint_angle*np.ones(y.shape[0])
             else:
-                new_y = np.array(self.trials[0].torque_array - self.trials[0].torque_offset())
-                new_y = signal.resample(y, cst.shape[0])
+                new_y = np.array(trial.torque_array - trial.torque_offset())
+                print(new_y.shape)
+                new_y = signal.resample(new_y, cst.shape[0])
+                print(new_y.shape)
                 y = np.concatenate((y, new_y))
-
+                print(y.shape)
                 x = np.concatenate((x, cst))
-
+                angles = np.concatenate((angles, trial.joint_angle*np.ones(new_y.shape[0])))
             t+=1
 
         print(y.shape)
@@ -448,10 +455,6 @@ class calibrate:
         for i in range(n):
             new_column = pd.DataFrame({'Muscle '+str(muscles[i]): x[:,i]})
             cst_df = pd.concat([cst_df, new_column], axis=1)
-        
-        angles = self.trials[0].joint_angle*np.ones(len(self.trials[0].torque_array))
-        for i in range(len(self.trials)):
-            angles = np.concatenate((angles, self.trials[i].joint_angle*np.ones(len(self.trials[i].torque_array))))
         
         angles = pd.DataFrame({'Angles': angles})
         cst_df = pd.concat([cst_df, angles],axis=1)
@@ -481,8 +484,6 @@ class calibrate:
         rospy.set_param('calibrated', True)
 
     def cst_predict(self, data):
-
-        num_groups = data.shape[1] // 64 #number of rows (408)/64=6.375   6 groups
 
         sample_count2 = 0
         sample_count = 0
@@ -586,7 +587,6 @@ if __name__ == '__main__':
         
         trials = [baseline, PF0, PF10, PFn10, DF0, DF10]
         
-
         '''
         # Angle #
         baseline = trial(0,25, None, "flat", 0.0)
@@ -645,7 +645,7 @@ if __name__ == '__main__':
         trials = [baseline, sin10, sin0, sinm10]
         '''
 
-        trials = [PF0, PF10]
+        # trials = [PF10, DF10]
 
         calibration = calibrate(trials)
         rospy.spin()
