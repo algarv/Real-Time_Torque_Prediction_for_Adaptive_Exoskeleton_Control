@@ -15,8 +15,14 @@
         <node name="torque_stream" pkg="talker_listener" type="torque_stream.py" output="screen"/>
     </group>
 
-    <node name="calibration_cst" pkg="talker_listener" type="calibrate_cst.py" output="screen" if="$(eval arg('method') == 'cst')"/>
-    <node name="calibration_emg" pkg="talker_listener" type="calibrate_emg.py" output="screen" if="$(eval arg('method') == 'emg')"/>
-    <node name="QC_node" pkg="talker_listener" type="QC_node3.py" output="screen"/>
+    <group if="$(eval arg('method') == 'cst')">
+        <node name="calibration_cst" pkg="talker_listener" type="calibrate_cst.py" output="screen" />
+        <node name="QC_node_cst" pkg="talker_listener" type="QC_node_cst.py" output="screen"/>
+    </group>
+
+    <group if="$(eval arg('method') == 'emg')">
+        <node name="calibration_emg" pkg="talker_listener" type="calibrate_emg.py" output="screen"/>
+        <node name="QC_node_emg" pkg="talker_listener" type="QC_node_emg.py" output="screen"/>
+    </group>
 
 </launch>

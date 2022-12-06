@@ -202,8 +202,7 @@ class calibrate:
         if skip:
             rospy.wait_for_message('/h3/robot_states', State,timeout=None)
             rospy.wait_for_message('hdEMG_stream',hdemg,timeout=None)
-            rospy.set_param('emg_coef', [-8.57409162e-02, -1.00146085e+00, 2.54005172e-03, 1.60128219e-02, 8.90337001e-02, 1.58813251e+00, -3.65757650e-03, -2.47658331e-02, 5.08335815e-02, -2.35550813e-01, -1.54598354e-03, -7.65382330e-03, 5.86822916e-01, 2.87710463e+00, -1.37723825e+01])
-            rospy.set_param('cst_coef', [0.613430299271461, 0.9098084781400041, 0.409857422818683, -0.20047670400913495, 0.08541811441013507, -4.42430850813377])#[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0])
+            rospy.set_param('cst_coef', [-8.57409162e-02, -1.00146085e+00, 2.54005172e-03, 1.60128219e-02, 8.90337001e-02, 1.58813251e+00, -3.65757650e-03, -2.47658331e-02, 5.08335815e-02, -2.35550813e-01, -1.54598354e-03, -7.65382330e-03, 5.86822916e-01, 2.87710463e+00, -1.37723825e+01])
             rospy.set_param('calibrated', True)
         else:
             rospy.wait_for_message('hdEMG_stream',hdemg,timeout=None)
@@ -386,9 +385,8 @@ class calibrate:
             for i in range(n):
                 if np.max(trial.emg_array[:,i,:]) > emg_norm_vals[i]:
                     emg_norm_vals[i] = np.max(trial.emg_array[:,i,:])
-        print(emg_norm_vals)
-
-        rospy.set_param('emg_norm_vals',emg_norm_vals)
+        
+        rospy.set_param('emg_norm_vals',[float(val) for val in emg_norm_vals])#emg_norm_vals)
 
         t = 0
         for trial in self.trials:
@@ -444,18 +442,15 @@ class calibrate:
         cst_res = sp.optimize.minimize(self.err, p0, args=(cst_df))
         cst_coef = cst_res.x
         cst_coef = [float(x) for x in cst_coef]
-        print('EMG Coef: ', cst_coef)
+        print('CST Coef: ', cst_coef)
 
         cst_r2, cst_RMSE = self.calc_r2(cst_df['Torque'], cst_df.loc[:,cst_df.columns != 'Torque'], cst_coef)
-        # rospy.loginfo("CST R^2, RMSE: ")
-        # rospy.loginfo(cst_r2)
-        # rospy.loginfo(cst_RMSE)
-        rospy.loginfo("EMG R^2, RMSE: ")
+        rospy.loginfo("CST R^2, RMSE: ")
         rospy.loginfo(cst_r2)
         rospy.loginfo(cst_RMSE)
 
-        rospy.set_param('emg_coef',cst_coef)
-        # rospy.set_param('cst_coef',cst_coef)
+
+        rospy.set_param('cst_coef',cst_coef)
         rospy.set_param('calibrated', True)
 
     def cst_predict(self, data):
@@ -547,7 +542,6 @@ class calibrate:
             muscle = list(reading[64*j : 64*j + 64])
             if j in muscles:
                 samples.append([s if (ind is not noisy_channels[muscles.index(j)]) else 0 for ind, s in enumerate(muscle) ])
-                print(samples)
 
         self.emg_array.append(samples)
 
