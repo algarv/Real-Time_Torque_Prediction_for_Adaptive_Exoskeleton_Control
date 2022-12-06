@@ -12,6 +12,8 @@ from scipy import signal
 
 def main():
     rospy.init_node('emg_stream', log_level=rospy.DEBUG)
+    method = rospy.get_param('~method')
+    print(method)
     r = rospy.Rate(512)
     pub = rospy.Publisher('hdEMG_stream', hdemg, queue_size=10)
     
@@ -46,7 +48,6 @@ def main():
     # timer = rospy.get_time()
 
     data = df.to_numpy()
-    print(data)
     print(data.shape)
 
     # b, a = signal.butter(4, filter_window, btype='bandpass')
@@ -70,21 +71,38 @@ def main():
         if i >= len(data): #len(row) - 4:
             i = 0
 
-        # if sample_count % 5 == 0:
-            
-        sample = Float64MultiArray()
-        sample.data = reading
+        if method == 'emg':
+            if sample_count % 5 == 0:
+                
+                sample = Float64MultiArray()
+                sample.data = reading
 
-        dim = []
-        dim.append(MultiArrayDimension("rows", 1, 6*64))
-        dim.append(MultiArrayDimension("columns", 1, 1))
+                dim = []
+                dim.append(MultiArrayDimension("rows", 1, 6*64))
+                dim.append(MultiArrayDimension("columns", 1, 1))
 
-        sample.layout.dim = dim
+                sample.layout.dim = dim
 
-        stamped_sample.data = sample
+                stamped_sample.data = sample
 
 
-        pub.publish(stamped_sample)
+                pub.publish(stamped_sample)
+
+        else:
+
+            sample = Float64MultiArray()
+            sample.data = reading
+
+            dim = []
+            dim.append(MultiArrayDimension("rows", 1, 6*64))
+            dim.append(MultiArrayDimension("columns", 1, 1))
+
+            sample.layout.dim = dim
+
+            stamped_sample.data = sample
+
+
+            pub.publish(stamped_sample)
 
         r.sleep()
 

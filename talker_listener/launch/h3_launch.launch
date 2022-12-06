@@ -11,7 +11,10 @@
     </group>
 
     <group if="$(arg sim)">
-        <node name="emg_stream" pkg="talker_listener" type="emg_stream.py" output="screen"/>
+        <node name="emg_stream" pkg="talker_listener" type="emg_stream.py" output="screen">
+            <param name="method" type="string" value="$(arg method)"/>
+        </node>
+
         <node name="torque_stream" pkg="talker_listener" type="torque_stream.py" output="screen"/>
     </group>
 

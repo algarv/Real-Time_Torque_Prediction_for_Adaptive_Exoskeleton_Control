@@ -561,7 +561,7 @@ if __name__ == '__main__':
         trials = [baseline, sin10, sin0, sinm10]
         '''
 
-        # trials = [PF10]
+        trials = [PF10]
 
         calibration = calibrate(trials)
         rospy.spin()
