@@ -1,22 +1,31 @@
 # Real Time Torque Predictions to Control the Technaid H3 Ankle Exoskeleton 
 
-## Hardware
+## Set-Up
+
+### -- Hardware --
+This package reads data from the OTB Quattrocento and H3 Ankle exoskeleton. To connect these devices, we will use a dedicated router. A Raspberry Pi is used to interface with the exoskeleton controller via a PEAK CAN bus.
 
 <p align="center">
 <img src="talker_listener/img/hardware_annotated.png" />
 
+Connect the Quattrocento's ethernet port to a port on the router. The exoskeleton plugs into the control box.
 |  |  |
-|:--:|:--:|
-| <img src="talker_listener/img/controller_1_annotated.png" width="1049/50" height="786/50" />| <img src="talker_listener/img/controller_2_annotated.png" width="1050/50" height="789/50" />|
-|<img src="talker_listener/img/raspberry_pi_1_annotated.png" width="1054/50" height="788/50" /> |<img src="talker_listener/img/raspberry_pi_2_annotated.png" width="1053/50" height="791/50" />|
+|--|--|
+| <img src="talker_listener/img/controller_1_annotated.png" width="1049/100">| <img src="talker_listener/img/controller_2_annotated.png" width="1050/100" />|
+|<img src="talker_listener/img/raspberry_pi_1_annotated.png" width="1054/100" /> |<img src="talker_listener/img/raspberry_pi_2_annotated.png" width="1053/100" />|
+
+<img src="talker_listener/img/router_annotated.png" width="1053/100" />
 
 </p>
 
-## Software
+### -- Software --
 
 1. Computer Set-Up
     
-    1. Laptop (Ubuntu 22.04, ROS Noetic):
+    1. Laptop (Ubuntu 22.04 OR Windows 11, ROS Noetic):
+        
+        *Option 1: Ubuntu 22.04*
+
         1. Follow this link for installation instructions of ROS Noetic: http://wiki.ros.org/noetic/Installation/Ubuntu
         
         2. Download and Compile Repository
@@ -28,10 +37,50 @@
                 `git clone https://github.com/Technaid-S-L/technaid_h3_ankle_ros_python`
             
             2. Build the package
-
                 `cd ..`
-                
-                `catkin_make`        
+                `catkin_make`      
+        3. Wine Compatibility Layer
+
+            Wine is a tool to run Window-compatible software on the Linux OS. It can be used to access OTB Light and initialize the data stream from the OTB Quattrocento. 
+
+            Install Wine: https://wiki.winehq.org/Ubuntu
+
+            Install OTB using Wine: 
+            * https://wiki.winehq.org/Wine_User%27s_Guide
+            * https://www.otbioelettronica.it/en/downloads#47-software
+                * OTBioLab+ v1.5.7.2  
+        
+        *Option 2: Windows 11*
+
+        1.  Follow this link for installation instructions of ROS Noetic: http://wiki.ros.org/noetic/Installation/Windows
+            * On Step 2, select the noetic-windows branch
+        
+        2. Download and Compile Repository
+        
+            1. Create a directory for your workspace and clone the git repository into the src folder:
+                ```commandline
+                cd src
+                git clone https://github.com/Technaid-S-L/technaid_h3_ankle_ros_python`
+                ```
+            
+            2. Build the package
+                ```commandline
+                cd ..
+                catkin_make
+                ```
+            3. Source the workspace 
+                ```commandline
+                devel\setup.bat
+                ```     
+        3. ROS Windows Troubleshooting:
+            
+            * There is a notorious bug relating to version discrepancies with the tkinter graphics library included in the python distribution specific to ROS Windows. 
+            * If an error occurs with this library, try uninstalling and reinstalling:
+                ```commandline
+                pip uninstall matplotlib
+                pip uninstall tk 
+                pip install matplotlib
+                ```
             
     2. Raspberry Pi (Ubuntu 18.04, ROS Melodic): 
         1. Install Image: *Rpi4B_Ubuntu_18_04.ROS.img* by plugging in the SD card
@@ -80,23 +129,13 @@
             4. Laptop: User defined
             5. OTB Quattrocento: 192.168.0.6
 
-        4. Wine Compatibility Layer
 
-            Wine is a tool to run Window-compatible software on the Linux OS. It can be used to access OTB Light and initialize the data stream from the OTB Quattrocento. 
+    
+    ## Getting Started with the Package
 
-            Install Wine: https://wiki.winehq.org/Ubuntu
+    The Ubuntu or Windows laptop will serve as the primary computer and ROS Master. Be sure to replace 192.168.0.70 with whatever address is assigned to your computer.
 
-            Install OTB using Wine: 
-            * https://wiki.winehq.org/Wine_User%27s_Guide
-            * https://www.otbioelettronica.it/en/downloads#47-software
-                * OTBioLab+ v1.5.7.2
-
-
-    ### Protocol for Online Torque Prediction
-
-    The laptop will serve as the primary computer and ROS Master. Be sure to replace 192.168.0.70 with whatever address is assigned to your computer.
-
-    Access the raspberry pi from the primary computer via ssh:
+    Access the raspberry pi by connecting to display with HDMI or from the primary computer via ssh:
     ```commandline
     ssh exoh3@192.168.0.2
     password: exoskeleton
@@ -104,16 +143,16 @@
 
     Terminal 1 (Primary Computer)
     ```commandline
-    export ROS_IP=192.168.0.70 # Self
-    export ROS_MASTER_URI=http://192.168.0.70:11311 # Self
+    export ROS_IP=192.168.0.70
+    export ROS_MASTER_URI=http://192.168.0.70:11311
 
     roscore
     ```
     
     Terminal 2 (Raspberry Pi)
     ```commandline
-    export ROS_IP=192.168.0.2 # Self
-    export ROS_MASTER_URI=http://192.168.0.70:11311 # Primary computer
+    export ROS_IP=192.168.0.2
+    export ROS_MASTER_URI=http://192.168.0.70:11311
 
     roslaunch h3_hardware_interface h3_hardware_interface.launch
     ```
@@ -121,25 +160,45 @@
     Terminal 3 (Raspberry Pi)
     ```commandline
     export ROS_IP=192.168.0.2 # Self
-    export ROS_MASTER_URI=http://192.168.0.70:11311 # Primary computer
+    export ROS_MASTER_URI=http://192.168.0.70:11311
 
     roslaunch h3_control_client h3_position_controllers.launch
     ```
 
     Terminal 4 (Primary Computer)
     ```commandline
-    export ROS_IP=192.168.0.70 # Self
-    export ROS_MASTER_URI=http://192.168.0.70:11311 # Self
+    export ROS_IP=192.168.0.70
+    export ROS_MASTER_URI=http://192.168.0.70:11311
 
-    roslaunch talker_listener h3_launch.launch sim:=False method:='emg'
+    roslaunch talker_listener h3_launch.launch sim:=True method:=emg
     ```
     ![Terminals](talker_listener/img/terminals.png)
-## 
 
 
+    **h3_launch options**
+    * sim (default false)
+        * *true*: Stream torque and emg data from pre-defined CSV files. To select different files or change the file path, edit the files in the emg_stream.py and torque_stream.py nodes. 
+        * *false*: Run the data stream node to receive values from the Quattrocento, and read torque values from the exoskeleton.
+    * method (default emg)
+        
+        * *emg*: Predict torque from RMS EMG
+        * *cst*: Predict torque from nueral drive estimation. Choose the CNN model for motor unit decomposition in the calibrate_cst.py and QC_node_cst.py
 
 
-### h3_msgs - Messages and services required to run the H3
+    Trouble Shooting:
+    
+    * Make sure to source each new terminal window in the primary computer (the directory on the raspberry pi should be sourced automatically)
+        
+        * From the workspace directory:
+            
+            Windows: ```devel\setup.bat```
+            
+            Ubuntu:  ```source devel/setup.bash```
+
+    * On windows computers, you may need to disable firewalls
+
+    #### h3_launch.launch options ###
+
 
 *msg*
 - State.msg

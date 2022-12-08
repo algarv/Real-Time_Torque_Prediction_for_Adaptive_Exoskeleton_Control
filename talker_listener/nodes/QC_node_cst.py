@@ -74,8 +74,7 @@ class QC_node:
         rospy.wait_for_message('/h3/robot_states', State,timeout=None)
         rospy.wait_for_message('hdEMG_stream', State,timeout=None)
         while not rospy.is_shutdown():
-            self.calibrated = rospy.get_param('calibrated')
-            if self.calibrated:
+            if rospy.get_param('calibrated') == True:
                 if self.first_run == True:
                     self.sample_count = 0
                     self.sample_count2 = 0
@@ -141,7 +140,7 @@ class QC_node:
                     self.sample_count2 = 0
             i += 1
 
-        if self.batch_ready and self.calibrated:
+        if self.batch_ready:
             nueral_drive = model.predict_MUs(self.sample) #input layer (None, 40, 64)
             nueral_drive = nueral_drive.numpy()
             #print(nueral_drive)

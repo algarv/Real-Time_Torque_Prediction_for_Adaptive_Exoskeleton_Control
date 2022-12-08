@@ -25,7 +25,6 @@ torque_max = rospy.get_param('Max_Torque', 25.0)
 nyquist = .5 * 2048.0
 filter_window = [20.0/nyquist, 50.0/nyquist]
 win = 40
-method = 'emg' 
 adaptive = False #True
 muscles = [2, 3, 4] #MUST BE THE SAME IN BOTH FILES
 n = len(muscles)
@@ -64,7 +63,6 @@ class QC_node:
         self.raw_emg_array = []
         self.emg_win = []
         self.smooth_emg_win = []
-        self.cst_array = []
         self.theta = 0
         # self.fig, self.axs = plt.subplots()
 
@@ -82,12 +80,8 @@ class QC_node:
 
                 # rospy.loginfo("Sample: ")
                 # rospy.loginfo(self.sample)
-
-                if method == 'cst':
-                    self.torque_cmd = self.calc_torque_cst()
-                
-                if method == 'emg':
-                    self.torque_cmd = self.calc_torque_emg()
+    
+                self.torque_cmd = self.calc_torque_emg()
         
                 predictions.append(self.torque_cmd)
                 # df = pd.DataFrame(self.emg_array)
@@ -137,38 +131,13 @@ class QC_node:
 
         sample = []
         for j in range(n):
-            sample.append(np.mean(smoothed_reading[j]))#np.sqrt(np.mean([sample**2 for sample in smoothed_reading[j]])))
-
+            sample.append(np.mean(smoothed_reading[j]))
         
         self.emg_array.append(sample)
 
         self.sample_array = sample + [self.theta]
 
-        self.sample_count += 1
-
-        # i = 0
-        # for c in muscles:
-        #     if self.sample_count < win:
-        #         self.sample[i][self.sample_count] = samples[c]
-        #     else: # step size of 20
-        #         deleted = np.delete(self.sample[i], 0, axis=0)
-        #         self.sample[i] = np.append(deleted, [np.array(samples[c])],axis=0)
-        #         # if (self.sample_count % 20) == 0:
-        #         self.batch_ready = True
-                
-        #     i += 1
-
-        # if self.batch_ready:
-            
-        #     nueral_drive = model.predict_MUs(self.sample)
-        #     nueral_drive = nueral_drive.numpy()
-        #     cst = []
-        #     for i in range(n):
-        #         cst.append(np.sum(nueral_drive[:,i]))
-        #     self.cst_array.append(cst)
-                
-        self.sample_count += 1
-        
+        self.sample_count += 1        
 
     def sensor_callback(self,sensor_reading):
         # print("HELLO")
@@ -195,24 +164,6 @@ class QC_node:
         # self.emg_array.append(sample)
         
         # self.sample_array = sample + [self.theta]
-
-    def calc_torque_cst(self):
-        theta = self.theta
-        coef = rospy.get_param('cst_coef')
-        if len(self.cst_array) > 0:
-            cst_sample = self.cst_array[-1]
-        
-            nueral_drive = model.predict_MUs(self.sample)
-            nueral_drive = nueral_drive.numpy()
-
-            torque_cmd = 0
-            for i in range(n):
-                torque_cmd += coef[i]*cst_sample[i] + coef[i + 1 + n]*cst_sample[i]*theta
-            
-            torque_cmd += theta * coef[n]
-            torque_cmd += coef[-1]
-
-            return torque_cmd
 
     def calc_torque_emg(self):
         coef = rospy.get_param('emg_coef')

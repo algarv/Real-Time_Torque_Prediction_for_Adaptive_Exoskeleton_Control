@@ -36,11 +36,6 @@ import joblib
 trial_length = 25 #26 #seconds
 rest_time = 15 #seconds
 
-# Neural Net Set-Up #
-path = rospy.get_param("/file_dir")
-model_file = path + "/src/talker_listener/" + "best_model_cnn-allrun5_c8b_mix4-SG0-ST20-WS40-MU[0, 1, 2, 3]_1644222946_f.h5"
-model = MUdecomposer(model_file)
-
 # Filter parameters #
 nyquist = .5 * 2048.0
 filter_window = [20.0/nyquist, 500.0/nyquist]
