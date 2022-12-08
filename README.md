@@ -1,9 +1,13 @@
 # Real Time Torque Predictions to Control the Technaid H3 Ankle Exoskeleton 
 
+## Overview
+
+This package provides the framework to estimate torque from high-density EMG inputs across 3 muscles. There are two primary methods to train a model for these predictions: root-mean-square EMG signals or muscle activation estimated from a convolutional neural net. The current model is a nonlinear physiologically informed equation considering muscle activity, joint angle, and the interaction between these variables. Future work may consider other models or prediction methods.
+
 ## Set-Up
 
 ### -- Hardware --
-This package reads data from the OTB Quattrocento and H3 Ankle exoskeleton. To connect these devices, we will use a dedicated router. A Raspberry Pi is used to interface with the exoskeleton controller via a PEAK CAN bus.
+This package reads data from the OTB Quattrocento and H3 Ankle exoskeleton. To connect these devices, we will use a dedicated router. A Raspberry Pi provides the interface for the exoskeleton controller via a PEAK CAN bus.
 
 <p align="center">
 <img src="talker_listener/img/hardware_annotated.png" />
@@ -121,35 +125,51 @@ Connect the Quattrocento's ethernet port to a port on the router. The exoskeleto
                     ```
             8. If it launches, we know peak can is working and the H3 can connect
 
-        3. Router Setup
+    3. Router Setup
         
-            The network configuration with the OTB Quattrocento relies on DHCP
-
-            1. Raspberry Pi: 192.168.0.2
-            4. Laptop: User defined
-            5. OTB Quattrocento: 192.168.0.6
-
-
+        The network configuration with the OTB Quattrocento relies on DHCP
+        
+        1. Raspberry Pi: 192.168.0.2
+        4. Laptop: User defined
+        5. OTB Quattrocento: 192.168.0.6
     
+            [More information on configuring DHCP with the quattrocento](https://otbioelettronica.it/index.php?preview=1&option=com_dropfiles&format=&task=frontfile.download&catid=41&id=106&Itemid=1000000000000)
+
+    ## Streaming EMG Data
+    Configure OTB Light and start the data stream before launching if you are not working in simulation.
+
+    ![Terminals](talker_listener/img/OTB_setup.png)
+
+    The first time you use OTB Light or if you have changed the IP for the Quattrocento since you last used OTB Light, you will need to manually set the IP address by clicking the "Edit" button
+
+    After clicking the "Start" button, you should see a message indicating the data stream has started. At this point you can leave the app to run in the background as long as you do not close the window. If you receive a connection error, ensure you are connected to the router and the IP address in the settings menu of OTB Light matches the IP address displayed on the screen of the Quattrocento. See ["Router Set-Up"](#software).`
+
     ## Getting Started with the Package
 
     The Ubuntu or Windows laptop will serve as the primary computer and ROS Master. Be sure to replace 192.168.0.70 with whatever address is assigned to your computer.
 
-    Access the raspberry pi by connecting to display with HDMI or from the primary computer via ssh:
+    Access the raspberry pi by connecting to a display with HDMI or from the primary computer via ssh:
     ```commandline
     ssh exoh3@192.168.0.2
     password: exoskeleton
     ```
 
-    Terminal 1 (Primary Computer)
+
+    ### Linux Bash
+
+    - Start a ROS master 
+
+    *Terminal 1 (Primary Computer)*
     ```commandline
+    source devel/setup.bash
     export ROS_IP=192.168.0.70
     export ROS_MASTER_URI=http://192.168.0.70:11311
 
     roscore
     ```
-    
-    Terminal 2 (Raspberry Pi)
+    - Open Raspberry Pi terminals and launch the hardware interface and position controller
+
+    *Terminal 2 (Raspberry Pi)*
     ```commandline
     export ROS_IP=192.168.0.2
     export ROS_MASTER_URI=http://192.168.0.70:11311
@@ -157,16 +177,19 @@ Connect the Quattrocento's ethernet port to a port on the router. The exoskeleto
     roslaunch h3_hardware_interface h3_hardware_interface.launch
     ```
 
-    Terminal 3 (Raspberry Pi)
+    *Terminal 3 (Raspberry Pi)*
     ```commandline
-    export ROS_IP=192.168.0.2 # Self
+    export ROS_IP=192.168.0.2
     export ROS_MASTER_URI=http://192.168.0.70:11311
 
     roslaunch h3_control_client h3_position_controllers.launch
     ```
 
-    Terminal 4 (Primary Computer)
+    - Begin the calibration procedure 
+
+    *Terminal 4 (Primary Computer)*
     ```commandline
+    source devel/setup.bash
     export ROS_IP=192.168.0.70
     export ROS_MASTER_URI=http://192.168.0.70:11311
 
@@ -174,18 +197,60 @@ Connect the Quattrocento's ethernet port to a port on the router. The exoskeleto
     ```
     ![Terminals](talker_listener/img/terminals.png)
 
+    ### Windows
 
-    **h3_launch options**
+    - Set system environment variables:
+    
+        * ROS_MASTER_URI=http://192.168.0.70:11311
+        * ROS_IP=192.168.0.70
+
+    - Start a ROS master
+
+    *Terminal 1 (Primary Computer)*
+    ```commandline
+    devel\setup.bat
+    export ROS_MASTER_URI=http://192.168.0.70:11311
+    ```
+
+   - Open Raspberry Pi terminals and launch the hardware interface and position controller
+
+    *Terminal 2 (Raspberry Pi)*
+    ```commandline
+    export ROS_IP=192.168.0.2
+    export ROS_MASTER_URI=http://192.168.0.70:11311
+
+    roslaunch h3_hardware_interface h3_hardware_interface.launch
+    ```
+
+    *Terminal 3 (Raspberry Pi)*
+    ```commandline
+    export ROS_IP=192.168.0.2
+    export ROS_MASTER_URI=http://192.168.0.70:11311
+
+    roslaunch h3_control_client h3_position_controllers.launch
+    ```
+
+    - Begin the calibration procedure 
+
+    *Terminal 4 (Primary Computer)*
+    ```commandline
+    source devel/setup.bash
+    export ROS_IP=192.168.0.70
+    export ROS_MASTER_URI=http://192.168.0.70:11311
+
+    roslaunch talker_listener h3_launch.launch sim:=True method:=emg
+    ```
+
+    **h3_launch options:**
     * sim (default false)
         * *true*: Stream torque and emg data from pre-defined CSV files. To select different files or change the file path, edit the files in the emg_stream.py and torque_stream.py nodes. 
-        * *false*: Run the data stream node to receive values from the Quattrocento, and read torque values from the exoskeleton.
+        * *false*: Run the data stream node to receive values from the Quattrocento, read torque values from the H3's joint torque sensor and send position and torque commands to the H3.
     * method (default emg)
         
         * *emg*: Predict torque from RMS EMG
         * *cst*: Predict torque from nueral drive estimation. Choose the CNN model for motor unit decomposition in the calibrate_cst.py and QC_node_cst.py
 
-
-    Trouble Shooting:
+    **Trouble Shooting:**
     
     * Make sure to source each new terminal window in the primary computer (the directory on the raspberry pi should be sourced automatically)
         
@@ -196,97 +261,3 @@ Connect the Quattrocento's ethernet port to a port on the router. The exoskeleto
             Ubuntu:  ```source devel/setup.bash```
 
     * On windows computers, you may need to disable firewalls
-
-    #### h3_launch.launch options ###
-
-
-*msg*
-- State.msg
-- TaskCommand.msg
-
-*srv*
-- ControlType.srv
-- DataRecording.srv
-- Joint.srv
-- TriggerOutput.srv
-    
-### talker_listener - primary package 
-
-*nodes*
-- QC_node - receives raw EMG (calls qc_stream) and sends torque command
-- QC_MU_predict - (NOT MADE YET) receives EMG and makes MU firing predictions
-- QC_Torque_predict - (NOT MADE YET) receives windowed MU firing, ankle angle, etc. and makes torque prediction
-- QC_Calibrate - (NOT MADE YET) controls calibration
-    
-*talker_listener python package*
-- Neural Net #1: Individual MU Predictions
-    - hdEMG_DCNN.py
-    - hdEMG_validate.py
-    - qc_communicate.py
-    - qc_stream.py
-_ listener.py
-- talker.py
-- test_script.py
-
-### Launch Files used from technaid_h3_ros
-
-- Launches the hardware interface
-
-`h3_hardware_interface h3_hardware_interface.launch`
-
-- Control Client Options:
-
-    1. Position Control: 
-        `h3_control_client h3_position_controllers.launch`
-    2. Torque Control:
-        `h3_control_client h3_torque_controllers.launch`
-    3. Task Control:
-       `h3_control_client h3_task_controller.launch`
-    4. Monitoring: 
-       `h3_control_client h3_monitoring_controller.launch`
-
-### Adapting Configuration Variables
-
-- Setting joint control type for each joint - set to no control for unused
-    - No control: 0?
-    - Position control: 1
-    - Torque control: 3
-- View Joint Limits
-    - ?
-- 
-
-
-## Notes about the H3
-
-- DF is negative, PF is positive, neutral (0 rad) is foot perpendicular to shank
-- Angles in radians
-- If angle limit is reached, it will stop working until it is pushed back within limits
-- Why should I remember 51?
-- Difference between joint states and robot states
-    - Robot states also includes
-    - Order of Joints
-        - Robot States: 
-        - Joint States: 
-
-## If This Problem Occurs
-
-1. If you are unable to publish but can receive, try turning your firewall off
-    1. For example: go to McAffee and turn firewall off
-
-## Next Steps and Considerations
-
-- Create a node for calibration
-- Create a node for MU firing prediction
-- Strap on the exoskeleton so foot doesn't move
-- Receive the ankle exoskeleton adapter
-- Condense into a single launch file
-- Set protocol for calibration
-- Latency testing
-- Might want to buy an SD card with more space (64GB, current has 32GB)
-- Create my own control_client?
-- On the node controlling torque, when I kill the node (ctrl+c), I need it to send torque command of zero
-- Figure out PuTTY
-
-## Other Resources
-
-See H3_Documentation_V0.0.2_draft.pdf for H3 Documentation 
