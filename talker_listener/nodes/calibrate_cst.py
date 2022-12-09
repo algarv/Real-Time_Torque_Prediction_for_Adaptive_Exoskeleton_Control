@@ -67,13 +67,12 @@ class trial:
         traj_shape (string) : "trap" for trapezoid, "sin" for sinusoid, "bi-sin" for a bidirectional sinusoid or "flat" for baseline 0% effort 
 
     '''
-    def __init__(self, joint_angle, trial_length, rest_length, direction, traj_shape, effort):
+    def __init__(self, joint_angle, trial_length, direction, traj_shape, effort):
 
         self.r = rospy.Rate(2048)
 
         self.joint_angle = joint_angle
         self.trial_length = trial_length
-        self.rest_length = rest_length
         self.traj_shape = traj_shape
         self.direction = direction
         self.effort = effort
@@ -86,9 +85,6 @@ class trial:
 
         self.raw_emg_array = []
         self.emg_array = [] 
-        self.smooth_emg_win = []
-        self.emg_win = []
-
         self.cst_array = []
 
         self.emg_start_index = 0
@@ -100,6 +96,8 @@ class trial:
     def torque_offset(self):
         ''' Calculate the torque offset for the trial
         '''
+        print(self.torque_array)
+
         if self.traj_shape == "flat":
             return np.mean(self.torque_array)
 
@@ -216,9 +214,6 @@ class calibrate:
 
         self.raw_emg_array = []
         self.emg_array = [] 
-        self.smooth_emg_win = []
-        self.emg_win = []
-
         self.cst_array = []
 
         if skip:
@@ -354,7 +349,7 @@ class calibrate:
             
 
             self.cst_array = []
-            duration = rospy.Duration.from_sec(trial_length)
+            duration = rospy.Duration.from_sec(trial.trial_length)
             
             # Measure baseline torque at rest
             rospy.loginfo("Collecting baseline")
@@ -386,7 +381,7 @@ class calibrate:
 
             # Start real-time plot
             self.axs.plot(desired_traj, color='blue')
-            self.axs.set_xlim(0, trial_length)
+            self.axs.set_xlim(0, trial.trial_length)
             self.axs.set_ylim(-1.5*trial.effort*trial.MVC, 1.5*trial.effort*trial.MVC)
             plt.pause(0.01)
 
@@ -421,7 +416,7 @@ class calibrate:
 
             # Prepare the next trial
             rospy.loginfo("REST")
-            rospy.sleep(rest_time)
+            rospy.sleep(3)
             plt.close()
         
         self.calibration()
@@ -483,24 +478,16 @@ class calibrate:
 
             if t == 0:
                 y = np.array(trial.torque_array - trial.torque_offset())
-                print(y.shape)
                 y = signal.resample(y, cst.shape[0])
-                print(y.shape)
                 x = cst
                 angles = trial.joint_angle*np.ones(y.shape[0])
             else:
                 new_y = np.array(trial.torque_array - trial.torque_offset())
-                print(new_y.shape)
                 new_y = signal.resample(new_y, cst.shape[0])
-                print(new_y.shape)
                 y = np.concatenate((y, new_y))
-                print(y.shape)
                 x = np.concatenate((x, cst))
                 angles = np.concatenate((angles, trial.joint_angle*np.ones(new_y.shape[0])))
             t+=1
-
-        print(y.shape)
-        print(x.shape)
 
         cst_df = pd.DataFrame({'Torque': y})
         for i in range(n):
@@ -707,7 +694,7 @@ if __name__ == '__main__':
         trials = [baseline, sin10, sin0, sinm10]
         '''
 
-        # trials = [PF10, DF10]
+        trials = [PF10]
 
         calibration = calibrate(trials)
         rospy.spin()

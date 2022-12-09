@@ -77,6 +77,8 @@ class QC_node:
 
                 self.first_run = False
 
+                self.torque_cmd = self.calc_torque_emg()
+
                 r.sleep()
 
     def send_torque_cmd(self, event=None):

@@ -335,8 +335,7 @@ class calibrate:
             self.torque_array = []
             self.smoothed_torque_array = []
             
-            self.cst_array = []
-            duration = rospy.Duration.from_sec(trial_length)
+            duration = rospy.Duration.from_sec(trial.trial_length)
             
             # Measure baseline torque at rest
             rospy.loginfo("Collecting baseline")
@@ -365,7 +364,7 @@ class calibrate:
 
             # Start real-time plot
             self.axs.plot(desired_traj, color='blue')
-            self.axs.set_xlim(0, trial_length)
+            self.axs.set_xlim(0, trial.trial_length)
             self.axs.set_ylim(-1.5*trial.effort*trial.MVC, 1.5*trial.effort*trial.MVC)
             plt.pause(0.01)
 
@@ -397,7 +396,7 @@ class calibrate:
             
             # Prepare the next trial
             rospy.loginfo("REST")
-            rospy.sleep(rest_time)
+            rospy.sleep(3)
             plt.close()
         
         self.calibration()
@@ -409,7 +408,7 @@ class calibrate:
         self.emg_sub.unregister()
         self.torque_sub.unregister()
 
-        print("If you just got a broken pipe error but are seeing this message, all is well")
+        print("Unregistered subscribers (ignore any broken pipe errors)")
 
         path = rospy.get_param("/file_dir")
         raw_torque_df = pd.DataFrame(self.raw_torque_array)

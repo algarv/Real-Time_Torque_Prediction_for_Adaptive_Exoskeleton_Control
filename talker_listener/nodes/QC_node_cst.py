@@ -90,9 +90,6 @@ class QC_node:
 
                 self.first_run = False
 
-                # rospy.loginfo("Sample: ")
-                # rospy.loginfo(self.sample)
-
                 self.torque_cmd = self.calc_torque_cst()
                                         
                 r.sleep()
@@ -119,7 +116,6 @@ class QC_node:
 
         reading = hdEMG.data.data
         num_groups = len(reading) // 64
-        self.raw_emg_array.append(reading)
 
         samples = []
         for j in range(num_groups): #6 groups
@@ -187,7 +183,7 @@ class QC_node:
         if len(self.cst_array) > 0:
             torque_cmd = self.f(pd.DataFrame(self.sample_array), coef)
 
-            return torque_cmd[0]
+            return -1*torque_cmd[0]
     
     def f(self, X, betas):
         '''The model to predict torque from CST estimation
