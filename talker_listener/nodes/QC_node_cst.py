@@ -1,4 +1,19 @@
 #!/usr/bin/env python
+'''
+QC_node_cst Node
+
+This node subscribes to the torque measurements from the exoskeleton and the high-density EMG data from the intermediate streaming node and predicts torque_cmds
+to send to the h3 in real time. 
+
+Subscribers:
+    Name: /h3/robot_states Type: h3_msgs/State         Published Rate: 100 Hz 
+    
+    Name: /hdEMG_stream    Type: talker_listener/hdemg Published Rate: 100 Hz 
+
+Publishers:
+    Name: /h3/right_ankle_effort_controller/command' Type: Float64
+'''
+
 
 import rospy
 import random
@@ -15,73 +30,63 @@ import message_filters
 from sklearn.gaussian_process import GaussianProcessRegressor
 import joblib
 
+# Neural Net Set-Up #
 path = rospy.get_param("/file_dir")
 #model_file = path + "\\src\\talker_listener\\best_model_cnn-allrun5_c8b_mix4-SG0-ST20-WS40-MU[0, 1, 2, 3]_1644222946_f.h5"
 model_file = path + "/src/talker_listener/" + "best_model_cnn-allrun5_c8b_mix4-SG0-ST20-WS40-MU[0, 1, 2, 3]_1644222946_f.h5"
 model = MUdecomposer(model_file)
 
+# Filter parameters #
 nyquist = .5 * 512
-filter_window = [20.0/nyquist, 50.0/nyquist]
-win = 40
-method = 'cst' 
-adaptive = False #True
-muscles = [2, 3, 4] #MUST BE THE SAME IN BOTH FILES
-n = len(muscles)
-noisy_channels = [[],[],[]]
-window = [20/nyquist, 50/nyquist]
 
-emg_window = 300 #samples
 torque_window = 50 #samples
 cst_window = 40
 prediction_step_size = 20
 
-mass = 2.37 #kg
-g = -9.81 #m/s^2
-l = 0.1524 #m
+# Configuration for EMG data #
+muscles = [2, 3, 4] 
+n = len(muscles)
+noisy_channels = [[],[],[]]
 
-predictions = []
 
 class QC_node:
     def __init__(self):
-        r = rospy.Rate(2048) #2048 HZ for reading samples, 33 HZ for predictions  #100Hz for torque controller
-        self.dt = 1.0 / 100.0
+        
+        r = rospy.Rate(2048)
+        self.dt = 1.0 / 512.0
+        
         self.torque_pub = rospy.Publisher('/h3/right_ankle_effort_controller/command', Float64, queue_size=10)
         self.sensor_sub = rospy.Subscriber('/h3/robot_states', State, self.sensor_callback)
         self.emg_sub = rospy.Subscriber('hdEMG_stream', hdemg, self.get_sample)
-        # torque_sub = message_filters.Subscriber('/h3/robot_states', State)#, self.torque_calib)
-        # emg_sub = message_filters.Subscriber('hdEMG_stream', hdemg)#, self.emg_calib)
-        # ts = message_filters.ApproximateTimeSynchronizer([torque_sub, emg_sub], queue_size=25, slop=0.01)
-        # ts.registerCallback(self.sensor_callback)
-        
+
+        # Timer to send torque commands at 100 Hz
         rospy.Timer(rospy.Duration(.01),self.send_torque_cmd)
         
+        # Initialize arrays for data collection
         self.first_run = True
         self.batch_ready = False
         self.sample_count = 0
         self.sample_count2 = 0
         self.sample = np.zeros((n, cst_window, 64))
-        self.emg_array = []
         self.cst_array = np.zeros((1,n))
-        self.raw_emg_array = []
-        self.emg_win = []
-        self.smooth_emg_win = []
         self.cst_sample = [0 for i in range(n)]
         self.sample_array = [0 for i in range(n+1)]
         self.theta = 0
-        # self.fig, self.axs = plt.subplots()
 
         self.torque_cmd = 0
+
         rospy.wait_for_message('/h3/robot_states', State,timeout=None)
         rospy.wait_for_message('hdEMG_stream', State,timeout=None)
         while not rospy.is_shutdown():
+            # Wait for the calibration node to finish and set the flag to true 
             if rospy.get_param('calibrated') == True:
+                # Re-set data arrays
                 if self.first_run == True:
                     self.sample_count = 0
                     self.sample_count2 = 0
-                    self.sample = np.zeros((n, win, 64))
+                    self.sample = np.zeros((n, cst_window, 64))
                     self.emg_norm_vals = rospy.get_param('emg_norm_vals',[1,1,1])
                     self.torque_max = rospy.get_param('Max_Torque', 35.0)
-                    # self.gpr = joblib.load(path + "/src/talker_listener/emg_gpr")
 
                 self.first_run = False
 
@@ -89,23 +94,12 @@ class QC_node:
                 # rospy.loginfo(self.sample)
 
                 self.torque_cmd = self.calc_torque_cst()
-                        
-                predictions.append(self.torque_cmd)
-                # df = pd.DataFrame(self.emg_array)
-                # df.columns = ["Muscle" + str(num) for num in muscles]
-                # df.plot(subplots=True, title="RMS EMG After Bandpass Filter", ax=self.axs)
-
-                # if adaptive:
-                #     self.torque_cmd = (self.torque_cmd - self.T_if) #+ (mass * g * l * np.sin(self.theta_next))
-
-                # plt.pause(.01)
-                # predictions_df = pd.DataFrame(predictions)
-                # predictions_df.to_csv(path + "/src/talker_listener/predictions.csv")
-                
+                                        
                 r.sleep()
 
     def send_torque_cmd(self, event=None):
-
+        ''' Callback for 100 Hz timer to publish torque command messages
+        '''
         if rospy.get_param('calibrated') == True:
 
             rospy.loginfo("Torque_CMD: ")
@@ -117,6 +111,11 @@ class QC_node:
             self.torque_pub.publish(self.torque_cmd)
 
     def get_sample(self,hdEMG):
+        ''' Callback for the /hdEMG topic. 
+        Organize the raw data into batches for the neural net to predict muscle activations, and then convolves the predictions into an estimation of the 
+        cumulative spike train. Updates the class variable sample_array with the CST estimation and current joint angle measurement to create a 4 element 
+        list for torque estimation.   
+        '''
 
         reading = hdEMG.data.data
         num_groups = len(reading) // 64
@@ -171,12 +170,19 @@ class QC_node:
         
 
     def sensor_callback(self,sensor_reading):
+        ''' Callback for /h3/robot_states. Reads sensor messages from the h3 and saves them in class variables.
+        '''
         self.theta = sensor_reading.joint_position[2]
         self.theta_dot = sensor_reading.joint_velocity[2]
         self.net_torque = sensor_reading.joint_torque_sensor[2]
         self.theta_next = self.theta + self.theta_dot * self.dt
 
     def calc_torque_cst(self):
+        ''' Predicts torque using the model fit in the calibration node and the sample array created in the hdEMG callback.
+
+        Returns:
+            torque_cmd (float): Torque command
+        '''
         coef = rospy.get_param('cst_coef')
         if len(self.cst_array) > 0:
             torque_cmd = self.f(pd.DataFrame(self.sample_array), coef)
@@ -184,6 +190,14 @@ class QC_node:
             return torque_cmd[0]
     
     def f(self, X, betas):
+        '''The model to predict torque from CST estimation
+
+        Args:
+            X (Data Frame): Data frame containing a column for each muscle and one column for joint angle        
+        Returns:
+            f (float[]): Array of emg predictions
+        '''
+
         ones = pd.DataFrame({'ones': np.ones(X.iloc[1,:].size) }).T
         
         RMS_TA = X.iloc[0,:]

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 '''
-Calibration Node
+calibration_emg Node
 
 This node subscribes to the torque measurements from the exoskeleton and the high-density EMG data from the intermediate streaming node, collects and
-organizes the information through 6 phases, and finally fits a model with the processed data. 
+processes the data into RMS emg and smoothed torque for each trial, and finally fits a model with the processed data. 
 
 Subscribers:
     Name: /h3/robot_states Type: h3_msgs/State         Published Rate: 100 Hz 
     
-    Name: /hdEMG_stream    Type: talker_listener/hdemg Published Rate: 2048 Hz 
+    Name: /hdEMG_stream    Type: talker_listener/hdemg Published Rate: 100 Hz 
 
 Publishers:
     Name: /h3/right_ankle_position_controller/command Type: Float64
@@ -32,13 +32,8 @@ import message_filters
 from sklearn.gaussian_process import GaussianProcessRegressor
 import joblib
 
-# Parameters for trapezoid torque trajectories #
-trial_length = 25 #26 #seconds
-rest_time = 15 #seconds
-
 # Filter parameters #
-nyquist = .5 * 2048.0
-filter_window = [20.0/nyquist, 500.0/nyquist]
+nyquist = .5 * 100.0
 
 win = 40
 emg_window = 100 #samples
@@ -53,6 +48,16 @@ noisy_channels = [[],[],[]]
 skip = False
 
 class trial:
+    ''' Object for a calibration task 
+    
+    Args: 
+        joint_angle (float) : Position command in radians to lock exoskeleton
+        trial length (float) : Number of seconds for the torque trajectory
+        rest length (float): Number of seconds fo
+        direction (string) : "PF" for Plantar flexion or "DF" for dorsiflexion
+        traj_shape (string) : "trap" for trapezoid, "sin" for sinusoid, "bi-sin" for a bidirectional sinusoid or "flat" for baseline 0% effort 
+
+    '''
     def __init__(self, joint_angle, trial_length, direction, traj_shape, effort):
 
         self.r = rospy.Rate(2048)
@@ -62,6 +67,8 @@ class trial:
         self.traj_shape = traj_shape
         self.direction = direction
         self.effort = effort
+
+        # Initialize arrays for data collection
 
         self.MVC = 0
 
@@ -77,6 +84,8 @@ class trial:
         self.cst_array = []
 
     def torque_offset(self):
+        ''' Calculate the torque offset for the trial
+        '''
         if self.traj_shape == "flat":
             return np.mean(self.torque_array)
 
@@ -86,11 +95,17 @@ class trial:
             return np.max(self.torque_array) 
 
     def traj(self, offset):
+        ''' Create a reference torque trajectory of the specified shape
+
+        Args:
+            offset (float): Torque offset to subtract from the trajectory plot 
+        '''
         if self.traj_shape == "flat":
+            #Create a straight-line trajectory for baseline collection 
             return [0 for i in range(self.trial_length)]
         
         elif self.traj_shape == "trap":
-            ''' Create a trapezoidal trajectory based on the MVC measurement '''
+            #Create a trapezoidal trajectory based on the MVC measurement 
             min = offset
             max = self.MVC if self.direction is not "DF" else -1*self.MVC
             len = self.trial_length
@@ -114,7 +129,7 @@ class trial:
             return desired_traj
         
         elif self.traj_shape == "sin":
-            
+            #Create a sinusoidal trajectory base on the MVC measurement
             min = offset
             max = self.MVC if self.direction is not "DF" else -1*self.MVC
             len = self.trial_length
@@ -133,7 +148,7 @@ class trial:
             return desired_traj
 
         elif self.traj_shape == "bi-sin":
-            
+            #Create a bi-directional sinusoidal trajectory base on the MVC measurement
             min = offset
             max = self.MVC if self.direction is not "DF" else -1*self.MVC
             len = self.trial_length
@@ -156,7 +171,6 @@ class calibrate:
 
         self.trials = trials 
 
-        # Set rate to the maximum of the sensor publishers
         self.r = rospy.Rate(2048)
         
         # Initialize a timer that will be used to track the subscriber rates
@@ -201,7 +215,11 @@ class calibrate:
             self.data_collection()
 
     def max(self):
-        ''' Record the maximum voluntary contraction (MVC) over a 5 second period'''
+        ''' Record the maximum voluntary contraction (MVC) over a 5 second period
+
+        Returns:
+            MVC (float): Maximum torque produced
+        '''
 
         start_index = len(self.torque_array)
         start = rospy.Time.now()
@@ -210,10 +228,15 @@ class calibrate:
             self.r.sleep()
 
         MVC = np.max(np.abs(self.torque_array[start_index:])) #moving window average filter?
+        
         return MVC
 
     def get_max(self):
-        ''' Return the measured MVC as the average of 2 trials'''
+        ''' Return the measured MVC as the average of 2 trials
+
+        Returns:
+            Maximum Torque (float): Average of 2 MVCs
+        '''
 
         rospy.loginfo("Go!")
         max1 = self.max()
@@ -231,6 +254,16 @@ class calibrate:
         return float((max1 + max2)/2)
 
     def calc_r2(self, ydata, xdata, betas):
+        ''' Calculate the r squared value between the predicted and measured torque
+
+        Args:
+            ydata (Data Frame): Measured torque
+            xdata (Data Frame): Data from muscles and joint angle
+            betas (float[]): Coefficients of best fit 
+        Returns:
+            r2 (float): r-squared measurement of prediction
+            RMSE: root mean square error of prediction
+        '''
 
         ydata = ydata.T
         xdata = xdata.T
@@ -246,6 +279,12 @@ class calibrate:
         return r2, RMSE
     
     def f(self, X, betas):
+        '''The model to predict torque from RMS emg
+
+        Returns:
+            f (float[]): Array of emg predictions
+        '''
+
         ones = pd.DataFrame({'ones': np.ones(X.iloc[1,:].size) }).T
         zeros = pd.DataFrame({'output': np.zeros(X.iloc[1,:].size) }).T
         
@@ -259,6 +298,12 @@ class calibrate:
         return f[0]
 
     def err(self, betas, df):
+        '''Calculate error of predicted torque and actual torque measurements
+
+        Args:
+            betas (float[]): Coefficients of best fit
+            df (Data Frame): Data frame containing measured torque, RMS emg, and joint angle
+        '''
 
         prediction = self.f(df.iloc[:,df.columns != 'Torque'].T, betas)
         expected = df['Torque'].to_numpy()
@@ -269,6 +314,8 @@ class calibrate:
         return RMSE
 
     def data_collection(self):
+        '''Calibration procedure cycling through each task
+        '''
 
         for trial in self.trials:
             
@@ -313,7 +360,7 @@ class calibrate:
             self.smoothed_torque_array = []
             self.torque_array_for_plot = []
 
-            # Create a 20% Effort trapezoid trajectory
+            # Begin the torque trajectory task
             desired_traj = trial.traj(self.offset)
 
             # Start real-time plot
@@ -356,6 +403,9 @@ class calibrate:
         self.calibration()
 
     def calibration(self):
+        '''Post-processing steps after data collection
+        '''
+
         self.emg_sub.unregister()
         self.torque_sub.unregister()
 
@@ -392,7 +442,7 @@ class calibrate:
         
         emg_df = emg_df.dropna()
 
-        b, a = signal.butter(4, .5/(.5*100), btype='lowpass')
+        b, a = signal.butter(4, .5/nyquist, btype='lowpass')
         filtered = signal.filtfilt(b, a, emg_df, axis=0).tolist()
         filtered = np.array(filtered)
 
@@ -428,6 +478,8 @@ class calibrate:
         rospy.set_param('calibrated', True)
 
     def torque_calib(self,sensor_reading):
+        ''' Callback for the /h3/robot_states topic. Receives raw torque data and smooths it with a moving average. 
+        '''
         # print("Measured Frequency: ", 1/(rospy.get_time() - self.timer))
         # self.timer = rospy.get_time()
 
@@ -447,6 +499,8 @@ class calibrate:
             self.time.append(rospy.Time.now().to_sec() - self.start_time)
 
     def emg_calib(self,hdEMG):
+        ''' Callback for the /hdEMG topic. Calculates RMS emg across time for each channel and average 64 channels together for each muscle.  
+        '''
         # print(self.timer)
         # print("Measured Frequency: ", 1/(rospy.get_time() - self.timer))
         # self.timer = rospy.get_time()

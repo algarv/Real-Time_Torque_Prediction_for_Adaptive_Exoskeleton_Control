@@ -1,4 +1,12 @@
 #!/usr/bin/env python
+'''
+QC_node_emg Node
+
+Intermediate node to publish high density emg data from the Quattrocento 
+
+Publishers:
+    Name: 'hdEMG_stream' Type: talker_listener/hdemg
+'''
 
 import rospy
 import socket
@@ -12,23 +20,6 @@ from std_msgs.msg import String, Float64, Float64MultiArray, MultiArrayDimension
 from talker_listener.msg import hdemg
 from scipy import signal
 
-# set save path
-path = "C:\\Users\\Jackson\\Documents\\Jackson\\northwestern\\SRALAB\\H3" # "C:/Users/jlevine/Desktop"
-# set file name
-#datafile = "why_32768.csv"
-smoothing_window = 2048 * 10**5 #samples (2048 Hz * 100 ms window)
-data = []
-timestamp = []
-
-nyquist = .5 * 512 #.5 * 2048
-window = [20/nyquist, 500/nyquist]
-filtering_window = 100
-# b, a = signal.butter(4, window, btype='bandpass')
-# high_b, high_a = signal.butter(4, window, btype='bandpass')
-high_b, high_a = signal.butter(4, 20/nyquist, btype='highpass')
-
-num_samples = 0 
-
 
 def startup():
     # number of channels (408 for the quattrocento device)
@@ -41,8 +32,6 @@ def startup():
     nsec = 60
     # set buffer size (seconds)
     buffsize = 5
-
-
 
     start_comm = 'startTX'
     stop_comm = 'stopTX'
@@ -75,11 +64,6 @@ def record_print(q_socket, nchan, nbytes):
 
     q_socket.send(start_comm.encode())
 
-    # Loop for receiving, converting and displaying incoming data
-    time1 = time.time()
-    # while True:
-    # for i in range(fsamp*nsec):
-    
     # read raw data from socket
     sbytes = comm.read_raw_bytes(
         q_socket,
@@ -93,48 +77,16 @@ def record_print(q_socket, nchan, nbytes):
         nbytes,
         output_milli_volts=False)
     
-    # print(sample_from_channels[384])
-    # timestamp.append(time.time())
-    #data.append(sample_from_channels)
-
-    #print(sample_from_channels)
-    return sample_from_channels #data[-1]
-    #pub.publish(sample_from_channels)
-
-    #print(time.time()-time1)
-
-    # End communication with the socket
-    q_socket.send(stop_comm.encode())
-
-    # Convert raw data and timestamps to array and save
-    #dataset = np.array(data)
-    # timestamps = np.array(timestamp)
-    # timestamps = timestamps - timestamps[0]
-    #df = pd.DataFrame(np.column_stack((timestamps, dataset)))
-
-    channum = [str(n) for n in list(range(1, 65))]
-    auxnum = [str(n) for n in list(range(1, 17))]
-    othernum = [str(n) for n in list(range(1, 9))]
-
-    inset = (['IN1-4']+['']*63)+(['IN5-8']+['']*63)
-    multset = (['MULT IN1']+['']*63)+(['MULT IN2']+['']*63)+(['MULT IN3']+['']*63)+(['MULT IN4']+['']*63)
-    auxset = (['AUX IN1-16']+['']*15)+(['OTHER']+['']*7)
-
-    chansets = ['']+inset+multset+auxset
-    numsets = ['time']+channum*6+auxnum+othernum
-
-    df.columns = [chansets, numsets]
-    return dataset #df.to_numpy()
-    #df.to_csv(os.path.join(path, datafile), index=False)
+    return sample_from_channels
 
 
 if __name__ == '__main__':
+
     rospy.init_node('QC_stream_node_100')
-    r = rospy.Rate(512)
+
+    r = rospy.Rate(512) # Match the Quattrocento publishing rate
     pub = rospy.Publisher('hdEMG_stream', hdemg, queue_size=1)
     
-    #avg_window = 100 #10**5
-
     q_socket, nchan, nbytes = startup()
 
     timer = rospy.get_time()
@@ -145,10 +97,10 @@ if __name__ == '__main__':
 
         reading = record_print(q_socket, nchan, nbytes)
         stamped_sample = hdemg()
-        stamped_sample.header.stamp = rospy.get_rostime() #rospy.Time.now()
+        stamped_sample.header.stamp = rospy.get_rostime()
         sample_count += 1
         
-        if sample_count % 5 == 0:
+        if sample_count % 5 == 0: # Downsample to 100 Hz by publishing every 5th sample
             
             sample = Float64MultiArray()
             sample.data = reading
