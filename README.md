@@ -4,12 +4,35 @@
 
 This package provides the framework to estimate torque from high-density EMG inputs across 3 muscles. There are two primary methods to train a model for these predictions: root-mean-square EMG signals or muscle activation estimated from a convolutional neural net. The current model is a nonlinear physiologically informed equation considering muscle activity, joint angle, and the interaction between these variables. Future work may consider other models or prediction methods.
 
+## Talker_Listener Package Contents
+
+* calibrate_CST
+* calibrate_EMG
+    
+    * Runs through each of the calibration tasks and then fits a model with the data. The raw data from the torque and emg streams and the final data frame are saved to csv files in the src/talker_listener folder. The model coefficients are published to the parameter server to be used by the QC_node_CST. 
+
+* QC_node_CST
+* QC_node_EMG
+
+    * Calculates torque predictions and sends torque_cmd messages to the H3 exoskeletons. 
+
+* qc_stream_node_512
+* qc_stream_node_100
+
+    * Reads the Quattrocento high-density emg stream and plubished the data to the /hdEMG topic for the QC_node and calibrate nodes to access.
+
+* torque_stream
+* emg_stream
+
+    * Nodes used in simulation mode to mimic the torque and emg streams using pre-recorded raw emg and raw torque csv files. 
+
 ## Set-Up
 
 ### -- Hardware --
-This package reads data from the OTB Quattrocento and H3 Ankle exoskeleton. To connect these devices, we will use a dedicated router. A Raspberry Pi provides the interface for the exoskeleton controller via a PEAK CAN bus.
+This package reads data from the OTB Quattrocento and H3 Ankle exoskeleton. To connect these devices, we use a dedicated router. A Raspberry Pi provides the interface for the exoskeleton controller via a PEAK CAN bus.
 
 <p align="center">
+
 <img src="talker_listener/img/hardware_annotated.png" />
 
 Connect the Quattrocento's ethernet port to a port on the router. The exoskeleton plugs into the control box.
@@ -41,7 +64,9 @@ Connect the Quattrocento's ethernet port to a port on the router. The exoskeleto
                 `git clone https://github.com/Technaid-S-L/technaid_h3_ankle_ros_python`
             
             2. Build the package
+                
                 `cd ..`
+
                 `catkin_make`      
         3. Wine Compatibility Layer
 
@@ -94,7 +119,7 @@ Connect the Quattrocento's ethernet port to a port on the router. The exoskeleto
                 ```commandline
                 diskpart
                 list disk
-                Select Disk #
+                Select Disk
                 detail disk
                 clean
                 create partition primary
@@ -138,7 +163,9 @@ Connect the Quattrocento's ethernet port to a port on the router. The exoskeleto
     ## Streaming EMG Data
     Configure OTB Light and start the data stream before launching if you are not working in simulation.
 
-    ![Terminals](talker_listener/img/OTB_setup.png)
+    <p align="center">
+    <img src="talker_listener/img/OTB_setup.png"/>
+    </p>
 
     The first time you use OTB Light or if you have changed the IP for the Quattrocento since you last used OTB Light, you will need to manually set the IP address by clicking the "Edit" button
 
@@ -195,21 +222,24 @@ Connect the Quattrocento's ethernet port to a port on the router. The exoskeleto
 
     roslaunch talker_listener h3_launch.launch sim:=True method:=emg
     ```
-    ![Terminals](talker_listener/img/terminals.png)
+
+    <p align="center">
+    <img src="talker_listener/img/terminals.png"/>
+    </p>
 
     ### Windows
 
-    - Set system environment variables:
+    - Configure environment variables:
     
-        * ROS_MASTER_URI=http://192.168.0.70:11311
-        * ROS_IP=192.168.0.70
+        * Under System Variables:
+            * ROS_MASTER_URI=http://192.168.0.70:11311
+            * ROS_IP=192.168.0.70
 
     - Start a ROS master
 
     *Terminal 1 (Primary Computer)*
     ```commandline
-    devel\setup.bat
-    export ROS_MASTER_URI=http://192.168.0.70:11311
+    roscore
     ```
 
    - Open Raspberry Pi terminals and launch the hardware interface and position controller
@@ -234,7 +264,7 @@ Connect the Quattrocento's ethernet port to a port on the router. The exoskeleto
 
     *Terminal 4 (Primary Computer)*
     ```commandline
-    source devel/setup.bash
+    devel\setup.bat
     export ROS_IP=192.168.0.70
     export ROS_MASTER_URI=http://192.168.0.70:11311
 
@@ -261,3 +291,23 @@ Connect the Quattrocento's ethernet port to a port on the router. The exoskeleto
             Ubuntu:  ```source devel/setup.bash```
 
     * On windows computers, you may need to disable firewalls
+
+## Experiment Set-Up
+
+This package currently support high-density EMG data from 3 64-channel electrode grids. 
+
+<p align="center">
+<img src="talker_listener/img/EMGs.jpeg" style="transform:rotate(90deg);" width=400/>
+</p>
+
+All experiments have so far used the tibialis anterior, gastrocnemius, and soleus. For the best signal quality, use new, clean electrodes. 
+
+To ground the system, attach 2 wet ankle bands to the rightmost Quattrocento ground ports ("DAL Out" and "DAL In"). Stick two ground electrodes on the tibia, and connect one to the left Quattrocento ground port ("Patient Ref"). Connect the three EMG amplifiers together with the second ground electrode. 
+
+<p align="center">
+
+|  |  |  |
+|--|--|--|
+| ![Leg](talker_listener/img/leg3.jpeg)|![Leg](talker_listener/img/leg1.jpeg)|![Leg](talker_listener/img/leg2.jpeg)|
+
+</p>
