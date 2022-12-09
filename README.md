@@ -1,5 +1,5 @@
 # Real Time Torque Predictions to Control the Technaid H3 Ankle Exoskeleton 
-
+*[Learn more about this project on my portfolio](https://algarv.github.io/Portfolio/Exo/)*
 ## Overview
 
 This package provides the framework to estimate torque from high-density EMG inputs across 3 muscles. There are two primary methods to train a model for these predictions: root-mean-square EMG signals or muscle activation estimated from a convolutional neural net. The current model is a nonlinear physiologically informed equation considering muscle activity, joint angle, and the interaction between these variables. Future work may consider other models or prediction methods.
